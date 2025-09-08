@@ -1,0 +1,38 @@
+{
+    "DCU": "K100AI",  
+    "vllm_version": "0.6.2",    
+    "pkg_version": "dtk24043.v1.2",
+    "dst_path": "./result/",
+    "items":[
+        {
+            "model_name": "Qwen2-VL-7B-Instruct",
+            "model_path": "/data/liuxu/models/Qwen2-VL-7B-Instruct",
+            "dtype": "float16",
+            "tensor_parallel": [1],
+            "batch_size": [1, 8],
+            "img_per_prompt": [1, 8],
+            "seqlen_tuple": ["128 1024", "1024 1024"],
+            "img_size": ["640 640", "1920 1080"]
+        },
+        {
+            "model_name": "Qwen2-VL-72B-Instruct",
+            "model_path": "/data/liuxu/models/Qwen2-VL-72B-Instruct",
+            "dtype": "float16",
+            "tensor_parallel": [8],
+            "batch_size": [1, 8],
+            "img_per_prompt": [1, 8],
+            "seqlen_tuple": ["128 1024", "1024 1024"],
+            "img_size": ["640 640", "1920 1080"]
+        },
+        {
+            "model_name": "Qwen2-VL-72B-Instruct-GPTQ-Int4",
+            "model_path": "/data/liuxu/models/Qwen2-VL-72B-Instruct-GPTQ-Int4",
+            "dtype": "gptq",
+            "tensor_parallel": [4, 8],
+            "batch_size": [1, 8],
+            "img_per_prompt": [1, 8],
+            "seqlen_tuple": ["128 1024", "1024 1024"],
+            "img_size": ["640 640", "1920 1080"]
+        }
+    ]
+}

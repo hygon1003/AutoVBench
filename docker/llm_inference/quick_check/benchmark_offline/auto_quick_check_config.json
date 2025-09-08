@@ -1,0 +1,185 @@
+{
+    "DCU": "K100AI",  
+    "vllm_version": "0.6.2",    
+    "pkg_version": "dtk24043.v1.2",
+    "dst_path": "./result/",
+    "items":[
+        {
+            "model_name": "Qwen2.5-7B-Instruct",
+            "model_path": "/data/models/Qwen2.5-7B-Instruct",
+            "dtype": "float16",
+            "tensor_parallel": [1, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+
+
+        {
+            "model_name": "Qwen2.5-14B-Instruct",
+            "model_path": "/data/models/Qwen2.5-14B-Series/Qwen2.5-14B-Instruct",
+            "dtype": "float16",
+            "tensor_parallel": [2, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Qwen2.5-14B-Instruct-GPTQ-Int8",
+            "model_path": "/data/models/Qwen2.5-14B-Series/Qwen2.5-14B-Instruct-GPTQ-Int8",
+            "dtype": "gptq-int8",
+            "tensor_parallel": [2, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Qwen2.5-14B-Instruct-GPTQ-Int4",
+            "model_path": "/data/models/Qwen2.5-14B-Series/Qwen2.5-14B-Instruct-GPTQ-Int4",
+            "dtype": "gptq-int4",
+            "tensor_parallel": [2, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Qwen2.5-14B-Instruct-AWQ",
+            "model_path": "/data/models/Qwen2.5-14B-Series/Qwen2.5-14B-Instruct-AWQ",
+            "dtype": "awq",
+            "tensor_parallel": [2, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        
+        
+        {
+            "model_name": "Qwen2.5-32B-Instruct",
+            "model_path": "/data/models/Qwen2.5-32B-Series/Qwen2.5-32B-Instruct",
+            "dtype": "float16",
+            "tensor_parallel": [2, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Qwen2.5-32B-Instruct-GPTQ-Int8",
+            "model_path": "/data/models/Qwen2.5-32B-Series/Qwen2.5-32B-Instruct-GPTQ-Int8",
+            "dtype": "gptq-int8",
+            "tensor_parallel": [2, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Qwen2.5-32B-Instruct-GPTQ-Int4",
+            "model_path": "/data/models/Qwen2.5-32B-Series/Qwen2.5-32B-Instruct-GPTQ-Int4",
+            "dtype": "gptq-int4",
+            "tensor_parallel": [2, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Qwen2.5-32B-Instruct-AWQ",
+            "model_path": "/data/models/Qwen2.5-32B-Series/Qwen2.5-32B-Instruct-AWQ",
+            "dtype": "awq",
+            "tensor_parallel": [2, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+
+        {
+            "model_name": "Qwen2.5-72B-Instruct",
+            "model_path": "/data/models/Qwen2.5-72B-Series/Qwen2.5-72B-Instruct",
+            "dtype": "float16",
+            "tensor_parallel": [4, 8],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Qwen2.5-72B-Instruct-GPTQ-Int8",
+            "model_path": "/data/models/Qwen2.5-72B-Series/Qwen2.5-72B-Instruct-GPTQ-Int8",
+            "dtype": "gptq-int8",
+            "tensor_parallel": [2, 4, 8],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Qwen2.5-72B-Instruct-GPTQ-Int4",
+            "model_path": "/data/models/Qwen2.5-72B-Series/Qwen2.5-72B-Instruct-GPTQ-Int4",
+            "dtype": "gptq-int4",
+            "tensor_parallel": [2, 4, 8],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Qwen2.5-72B-Instruct-AWQ",
+            "model_path": "/data/models/Qwen2.5-72B-Series/Qwen2.5-72B-Instruct-AWQ",
+            "dtype": "awq",
+            "tensor_parallel": [2, 4, 8],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+
+        {
+            "model_name": "Llama-3-8B-Instruct",
+            "model_path": "/data/models/Meta-Llama-3-8B-Instruct",
+            "dtype": "float16",
+            "tensor_parallel": [1, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "32000 512"] 
+        },
+
+        {
+            "model_name": "Llama-3-70B-Instruct",
+            "model_path": "/data/models/Meta-Llama-3-70B-Instruct-Series/Meta-Llama-3-70B-Instruct-Instruct",
+            "dtype": "float16",
+            "tensor_parallel": [4, 8],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Llama-3-70B-Instruct-GPTQ-Int8",
+            "model_path": "/data/models/Meta-Llama-3-70B-Instruct-Series/Meta-Llama-3-70B-Instruct-GPTQ-Int8",
+            "dtype": "gptq-int8",
+            "tensor_parallel": [2, 4, 8],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Llama-3-70B-Instruct-GPTQ-Int4",
+            "model_path": "/data/models/Meta-Llama-3-70B-Instruct-Series/Meta-Llama-3-70B-Instruct-GPTQ-Int4",
+            "dtype": "gptq-int4",
+            "tensor_parallel": [2, 4, 8],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+
+        {
+            "model_name": "Llama-3-70B-Instruct-AWQ",
+            "model_path": "/data/models/Meta-Llama-3-70B-Instruct-Series/Meta-Llama-3-70B-Instruct-AWQ",
+            "dtype": "awq",
+            "tensor_parallel": [2, 4, 8],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple": ["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "Llama-2-7b-chat",
+            "model_path": "/data/models/meta-llama_Llama-2-7b-chat",
+            "dtype": "float16",
+            "tensor_parallel": [1, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple":["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+
+        {
+            "model_name": "chatglm3-6b",
+            "model_path": "/data/models/chatglm3-6b",
+            "dtype": "float16",
+            "tensor_parallel": [1, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple":["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        },
+        {
+            "model_name": "glm-4-9b-chat",
+            "model_path": "/data/models/glm-4-9b-chat",
+            "dtype": "float16",
+            "tensor_parallel": [1, 4],
+            "batch_size": [1, 64, 128],
+            "seqlen_tuple":["128 128", "1024 1024", "128 1024", "1024 128", "32000 512"]  
+        }
+    ]
+}
