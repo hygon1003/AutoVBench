@@ -2,15 +2,16 @@
 set -eo pipefail
 
 # ============================== 配置区 ==============================
-: ${OUTPUT_DIR:="/var"}        # 输出根目录（可设置环境变量）
-: ${NUM_PROMPT_LIST:="1,2,4,8,16"} # 并发数列表（可设置环境变量）
-: ${HOST:="127.0.0.1"}           # 服务IP（可设置环境变量）
-: ${PORT:=8000}           # 服务端口（可设置环境变量）
-: ${INPUT_OUTPUT:="128 128,128 1024"} # 输入输出长度组合（格式："ilen olen,ilen olen"）
+: ${OUTPUT_DIR:="/var"}                # 输出根目录（可设置环境变量）
+: ${NUM_PROMPT_LIST:="1,2,4,8,16"}     # 并发数列表（可设置环境变量）
+: ${HOST:="127.0.0.1"}                 # 服务IP（可设置环境变量）
+: ${PORT:=8000}                        # 服务端口（可设置环境变量）
+: ${INPUT_OUTPUT:="128 128,128 1024"}  # 输入输出长度组合（格式："ilen olen,ilen olen"）
+: ${NUM_GPUS:=4}                       # vllm服务使用DCU数量
 
 # 自动生成的日志目录，位于OUTPUT_DIR/output下
-LOG_DIR="${OUTPUT_DIR}/vllm_benchmarks_log/${MODEL}-$(date +%Y%m%d%H%M%S)"  
-RESULT_CSV="${LOG_DIR}/${MODEL}.csv"      # 结果汇总文件
+LOG_DIR="${OUTPUT_DIR}/vllm_benchmarks_log/${MODEL}/$(date +%Y-%m-%d-%H-%M-%S)"  
+RESULT_CSV="${LOG_DIR}/${MODEL}-${NUM_GPUS}cards.csv"      # 结果汇总文件
 
 # ============================== 函数定义 ==============================
 validate_positive_int() {
@@ -119,7 +120,7 @@ extract_metric() {
 
 run_benchmark() {
   local num_prompts=$1 input_len=$2 output_len=$3
-  local log_file="${LOG_DIR}/log/${MODEL}-${num_prompts}-inputlen-${input_len}-outputlen-${output_len}-$(date +%Y%m%d%H%M%S).log"
+  local log_file="${LOG_DIR}/log/${MODEL}-bs-${num_prompts}-inputlen-${input_len}-outputlen-${output_len}-$(date +%Y%m%d%H%M%S).log"
   
   echo "▶ 正在测试并发数: ${num_prompts} (输入长度: ${input_len}, 输出长度: ${output_len})"
   

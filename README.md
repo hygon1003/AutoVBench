@@ -13,7 +13,7 @@ docker pull lvjianjin.cn:8500/dcu/lvjj/base/autovbench:0.0.1
 - 基础Dockerfile
 
 ```
-cd AutoVBench/docker/
+cd docker/
 docker build -t lvjianjin.cn:8500/dcu/lvjj/base/autovbench:0.0.1 .
 ```
 
