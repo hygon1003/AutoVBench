@@ -4,7 +4,7 @@
 
 ### 准备镜像
 
-- 直接拉取镜像【推荐】
+- 【推荐】直接拉取镜像
 
 ```
 docker pull lvjianjin.cn:8500/dcu/lvjj/base/autovbench:0.0.1
@@ -17,7 +17,9 @@ cd docker/
 docker build -t lvjianjin.cn:8500/dcu/lvjj/base/autovbench:0.0.1 .
 ```
 
-### 配置文件
+### 部署
+
+#### 【推荐】基于Docker Compose
 
 修改配置文件`vim compose/docker-compose.yml`，请修改配置文件中的【需修改】处
 
@@ -123,8 +125,6 @@ services:
 
 ```
 
-### 启动服务
-
 基于docker-compose启动服务
 
 ```
@@ -147,6 +147,43 @@ docker logs -f autotest
 
 ```
 docker-compose down
+```
+
+#### 基于Docker
+
+创建容器
+
+```
+docker run -dit \
+       --network=host \
+       --ipc=host \
+       --name=autotest \
+       --shm-size=64G  \
+       --device=/dev/kfd --device=/dev/dri --device=/dev/mkfd \
+       -v /opt/hyhal:/opt/hyhal:ro \
+       --group-add video \
+       --cap-add=SYS_PTRACE \
+       --security-opt seccomp=unconfined \
+       --privileged \
+       --ulimit stack=-1:-1 --ulimit memlock=-1:-1 \
+       -e MODEL=DeepSeek-R1-Distill-Qwen-32B \                # API 使用的模型名称
+       -e TOKENIZER=/models/DeepSeek-R1-Distill-Qwen-32B \    # 分词器路径
+       -e NUM_PROMPT_LIST=1,4,8 \   # 输入输出长度，支持输入多组，每组间以逗号分隔，输入输出长度间以空格分隔
+       -e INPUT_OUTPUT='512 512,1024 1024' \                  # vllm服务使用GPU数量
+       -e NUM_GPUS=4 \                                        # 服务器IP
+       -e HOST=127.0.0.1 \                                  # 服务端口号
+       -e PORT=8000 \                                         # 日志保存路径
+       -e OUTPUT_DIR=/var \
+       -v /models:/models \
+       -v /var:/var \
+       lvjianjin.cn:8500/dcu/lvjj/base/autovbench:0.0.1 \
+       bash /vllm/benchmarks/benchmark.sh
+```
+
+查看测试日志
+
+```
+docker logs -f autotest
 ```
 
 ### 参考
