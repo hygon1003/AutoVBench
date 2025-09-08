@@ -92,6 +92,7 @@ services:
             - TOKENIZER=/models/DeepSeek-R1-Distill-Qwen-32B      # 【需修改】容器内模型挂载路径
             - NUM_PROMPT_LIST=1,4,8                               # 【需修改】测试并发数，支持多个并发输入，每个并发数间以逗号分隔
             - INPUT_OUTPUT=512 512,1024 1024                      # 【需修改】输入输出长度，支持输入多组，每组间以逗号分隔，输入输出长度间以空格分隔
+            - NUM_GPUS=4                                          # 【需修改】vllm服务使用DCU数量
             - HOST=127.0.0.1                                      # 服务IP
             - PORT=8000                                           # 服务端口
             - OUTPUT_DIR=/var                                     # 日志保存路径，可以默认不改
@@ -119,6 +120,7 @@ services:
             - /var:/var                                             # 输出路径本地挂载路径
         image: lvjianjin.cn:8500/dcu/lvjj/base/autovbench:0.0.1
         command: bash /vllm/benchmarks/benchmark.sh
+
 ```
 
 ### 启动服务
