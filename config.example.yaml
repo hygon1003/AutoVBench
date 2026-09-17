@@ -1,0 +1,30 @@
+# Backend: vllm (0.18.x) or sglang (0.5.x, recommended 0.5.10)
+backend: vllm
+
+# Address of an already-running model service.
+base_url: http://127.0.0.1:8000
+model: Qwen/Qwen3-8B
+# Optional API model name when it differs from the tokenizer/model path.
+served_model_name: null
+tokenizer: Qwen/Qwen3-8B
+
+# Official benchmark client executables.
+vllm_executable: vllm
+sglang_python: python
+
+num_prompts: 100
+concurrency: [1, 4, 8]
+input_output:
+  - input_len: 512
+    output_len: 512
+  - input_len: 1024
+    output_len: 1024
+
+seed: 1
+# null means the official benchmark default: all requests submitted immediately.
+request_rate: null
+ignore_eos: true
+keep_raw_results: false
+
+# Extra arguments are appended to the selected official benchmark command.
+extra_args: []

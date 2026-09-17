@@ -1,199 +1,140 @@
-### 简介
+# AutoVBench
 
-本文介绍AutoVBench，一个基于vllm的Benchmark的自动化测试框架 。
+AutoVBench 用于批量编排 vLLM 与 SGLang 官方在线服务 benchmark，并把每组
+workload 的官方结果统一写入 CSV。它不启动模型服务、不实现自己的压测算法，
+也不提供离线 benchmark。
 
-### 准备镜像
+## 支持范围
 
-- 【推荐】直接拉取镜像
+- vLLM benchmark 客户端：`0.18.x`，推荐基准版本 `0.18.1`
+- SGLang benchmark 客户端：`0.5.x`，推荐基准版本 `0.5.10`
+- workload 维度：并发数、随机输入 token 长度、随机输出 token 长度
+- 目标：已经启动且可从 benchmark 客户端访问的模型服务
 
-```
-docker pull lvjianjin.cn:8500/dcu/lvjj/base/autovbench:0.0.1
-```
+AutoVBench 会在任务开始前检查客户端版本。`vllm 0.15.x`、`sglang 0.4.x`
+等跨系列版本会被拒绝。同系列不同小版本可能存在官方字段差异，无法映射的值在
+CSV 中留空。服务端与 benchmark 客户端建议使用相同版本系列。
 
-- 基础Dockerfile
+## 工作原理
 
-```
-cd docker/
-docker build -t lvjianjin.cn:8500/dcu/lvjj/base/autovbench:0.0.1 .
-```
+- vLLM：调用官方 `vllm bench serve`
+- SGLang：调用官方 `python -m sglang.bench_serving`
+- AutoVBench 只构造命令、执行 workload 矩阵、读取官方 JSON/JSONL、转换 CSV
+- 吞吐、TTFT、TPOT、ITL、E2EL 均使用官方 benchmark 的结果，不重新计算
 
-### 部署
+## 安装
 
-#### 【推荐】基于Docker Compose
+推荐使用 conda 创建 Python 3.10 环境：
 
-修改配置文件`vim compose/docker-compose.yml`，请修改配置文件中的【需修改】处
-
-```
-version: "3"
-services:
-    vllm:
-        container_name: vllm
-        stdin_open: true
-        tty: true
-        privileged: true
-        network_mode: host
-        ipc: host
-        shm_size: 512G
-        environment:
-            - HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7             # 指定显卡
-            - ALLREDUCE_STREAM_WITH_COMPUTE=1
-            - NCCL_MIN_NCHANNELS=16
-            - NCCL_MAX_NCHANNELS=16
-            - VLLM_PCIE_USE_CUSTOM_ALLREDUCE=1
-            - VLLM_USE_V1=0
-            - VLLM_NUMA_BIND=1
-            - VLLM_RANK0_NUMA=0
-            - VLLM_RANK1_NUMA=0
-            - VLLM_RANK2_NUMA=0
-            - VLLM_RANK3_NUMA=0
-            - VLLM_RANK4_NUMA=0
-            - VLLM_RANK5_NUMA=0
-            - VLLM_RANK6_NUMA=0
-            - VLLM_RANK7_NUMA=0
-        devices:
-            - /dev/kfd
-            - /dev/mkfd
-            - /dev/dri
-        group_add:
-            - video
-        cap_add:
-            - SYS_PTRACE
-        security_opt:
-            - seccomp=unconfined
-        ulimits:
-            stack:
-                soft: -1
-                hard: -1
-            memlock:
-                soft: -1
-                hard: -1
-        user: root
-        volumes:
-            - /opt/hyhal:/opt/hyhal:ro
-            - /models:/models    # 【需修改】本地大模型挂载路径，调整宿主机路径
-        # 【需修改】启动vllm服务使用镜像
-        image: image.sourcefind.cn:5000/dcu/admin/base/vllm:0.9.2-ubuntu22.04-dtk25.04.1-rc5-rocblas101839-0811-das1.6-py3.10-20250812-beta
-        # 【需修改】起vllm服务命令解析
-        # numactl --cpunodebind=0 --membind=0：numa绑核，一般情况下会提升推理性能
-        # --served-model-name：API 使用的模型名称
-        # --tensor-parallel-size：使用的卡数
-        # --enable-prefix-caching：启用前缀缓存
-        # --trust-remote-code：信任远程代码执行
-        # --dtype：模型权重和激活值精度，可选值：auto, half, float16 等 6 种精度
-        command: numactl --cpunodebind=0 --membind=0 vllm serve /models/DeepSeek-R1-Distill-Qwen-32B --served-model-name DeepSeek-R1-Distill-Qwen-32B --tensor-parallel-size 4 --enable-prefix-caching --trust-remote-code  --dtype float16
-    autotest:
-        container_name: autotest
-        stdin_open: true
-        tty: true
-        privileged: true
-        network_mode: host
-        ipc: host
-        shm_size: 256G
-        environment:
-            - MODEL=DeepSeek-R1-Distill-Qwen-32B                  # 【需修改】容器内模型挂载路径
-            - TOKENIZER=/models/DeepSeek-R1-Distill-Qwen-32B      # 【需修改】容器内模型挂载路径
-            - NUM_PROMPT_LIST=1,4,8                               # 【需修改】测试并发数，支持多个并发输入，每个并发数间以逗号分隔
-            - INPUT_OUTPUT=512 512,1024 1024                      # 【需修改】输入输出长度，支持输入多组，每组间以逗号分隔，输入输出长度间以空格分隔
-            - NUM_GPUS=4                                          # 【需修改】vllm服务使用DCU数量
-            - HOST=127.0.0.1                                      # 服务IP
-            - PORT=8000                                           # 服务端口
-            - OUTPUT_DIR=/var                                     # 日志保存路径，可以默认不改
-        devices:
-            - /dev/kfd
-            - /dev/mkfd
-            - /dev/dri
-        group_add:
-            - video
-        cap_add:
-            - SYS_PTRACE
-        security_opt:
-            - seccomp=unconfined
-        ulimits:
-            stack:
-                soft: -1
-                hard: -1
-            memlock:
-                soft: -1
-                hard: -1
-        user: root
-        volumes:
-            - /opt/hyhal:/opt/hyhal:ro
-            - /models:/models                                       # 【需修改】本地大模型挂载路径，调整宿主机路径
-            - /var:/var                                             # 输出路径本地挂载路径
-        image: lvjianjin.cn:8500/dcu/lvjj/base/autovbench:0.0.1
-        command: bash /vllm/benchmarks/benchmark.sh
-
+```bash
+conda create -n autovbench python=3.10 -y
+conda activate autovbench
+pip install -e .
 ```
 
-基于docker-compose启动服务
+官方 benchmark 客户端由用户在对应环境中安装。例如：
 
-```
-docker-compose up -d
-```
+```bash
+# vLLM benchmark 环境
+pip install 'vllm[bench]==0.18.1'
 
-监控vllm服务
-
-```
-docker logs -f vllm
+# SGLang benchmark 环境
+pip install 'sglang==0.5.10'
 ```
 
-监控自动化测试服务
+如果客户端不在当前环境，可在配置中填写其绝对路径：
 
-```
-docker logs -f autotest
-```
-
-关闭服务，结束测试
-
-```
-docker-compose down
+```yaml
+vllm_executable: /opt/venvs/vllm/bin/vllm
+sglang_python: /opt/venvs/sglang/bin/python
 ```
 
-#### 基于Docker
+## 配置
 
-创建容器
+复制并修改示例：
 
-```
-docker run -dit \
-       --network=host \
-       --ipc=host \
-       --name=autotest \
-       --shm-size=64G  \
-       --device=/dev/kfd --device=/dev/dri --device=/dev/mkfd \
-       -v /opt/hyhal:/opt/hyhal:ro \
-       --group-add video \
-       --cap-add=SYS_PTRACE \
-       --security-opt seccomp=unconfined \
-       --privileged \
-       --ulimit stack=-1:-1 --ulimit memlock=-1:-1 \
-       -e MODEL=DeepSeek-R1-Distill-Qwen-32B \                # API 使用的模型名称
-       -e TOKENIZER=/models/DeepSeek-R1-Distill-Qwen-32B \    # 分词器路径
-       -e NUM_PROMPT_LIST=1,4,8 \   # 输入输出长度，支持输入多组，每组间以逗号分隔，输入输出长度间以空格分隔
-       -e INPUT_OUTPUT='512 512,1024 1024' \                  # vllm服务使用GPU数量
-       -e NUM_GPUS=4 \                                        # 服务器IP
-       -e HOST=127.0.0.1 \                                  # 服务端口号
-       -e PORT=8000 \                                         # 日志保存路径
-       -e OUTPUT_DIR=/var \
-       -v /models:/models \
-       -v /var:/var \
-       lvjianjin.cn:8500/dcu/lvjj/base/autovbench:0.0.1 \
-       bash /vllm/benchmarks/benchmark.sh
+```bash
+cp config.example.yaml config.yaml
 ```
 
-查看测试日志
+主要配置：
 
+```yaml
+backend: vllm
+base_url: http://127.0.0.1:8000
+model: Qwen/Qwen3-8B
+served_model_name: null
+tokenizer: Qwen/Qwen3-8B
+
+vllm_executable: vllm
+sglang_python: python
+
+num_prompts: 100
+concurrency: [1, 4, 8]
+input_output:
+  - input_len: 512
+    output_len: 512
+  - input_len: 1024
+    output_len: 1024
+
+seed: 1
+request_rate: null
+ignore_eos: true
+keep_raw_results: false
+extra_args: []
 ```
-docker logs -f autotest
+
+- `backend`：`vllm` 或 `sglang`
+- `base_url`：已启动服务的根地址
+- `model`：官方 benchmark 用于加载 tokenizer/标识结果的模型名或路径
+- `served_model_name`：API 暴露名称与 `model` 不同时填写
+- `request_rate: null`：使用官方默认值，一次提交所有请求
+- `keep_raw_results`：保留官方 JSON/JSONL 到 `<输出名>_raw/`
+- `extra_args`：原样追加到官方命令，用于传递框架支持的其他参数
+
+## 运行
+
+```bash
+autovbench run -c config.yaml -o results.csv
 ```
 
-### 参考
+每个 `concurrency × input_output` 组合产生一行。每完成一组，CSV 都会原子更新；
+后续 workload 失败不会丢失此前结果。只要有 workload 失败，命令最终返回非零退出码，
+失败原因来自官方 benchmark 的标准错误。
 
-vllm官方项目：https://github.com/vllm-project/vllm
+## CSV 字段
 
-vllm官方网站：https://docs.vllm.ai/en/stable/
+CSV 以 vLLM 0.18.1 官方 `--save-result` 的顶层聚合字段为基准，主要包括：
 
-vllm中文网站：https://vllm.hyper.ai/
+- 运行参数：`date`、`backend`、`model_id`、`tokenizer_id`、`num_prompts`、
+  `request_rate`、`max_concurrency`
+- workload：`random_input_len`、`random_output_len`
+- 总量与吞吐：`completed`、`failed`、`total_input_tokens`、
+  `total_output_tokens`、`request_throughput`、`output_throughput`、
+  `total_token_throughput`
+- 延迟：TTFT、TPOT、ITL、E2EL 的 mean、median、std、P99，单位为毫秒
+- 追溯信息：`client_version`、`autovbench_version`
 
-光合开发者社区：https://developer.sourcefind.cn/
+SGLang 字段映射：
 
-光源镜像站：https://sourcefind.cn/
+- `total_throughput` → `total_token_throughput`
+- `*_e2e_latency_ms` → `*_e2el_ms`
+- `failed` → `num_prompts - completed`
+- vLLM 独有且无可靠同义值的字段留空
+
+为保证 CSV 是一行一个 workload，默认不启用 vLLM `--save-detailed` 或 SGLang
+`--output-details`，请求级数组、生成文本和错误列表不写入 CSV。
+
+## 测试
+
+测试不需要 GPU 或在线模型服务：
+
+```bash
+pip install -e '.[test]'
+pytest
+```
+
+## 官方参考
+
+- [vLLM 0.18.1 bench serve](https://docs.vllm.ai/en/v0.18.1/cli/bench/serve/)
+- [SGLang serving benchmark](https://docs.sglang.io/docs/developer_guide/bench_serving)

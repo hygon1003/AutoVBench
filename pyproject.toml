@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autovbench"
+version = "0.1.0"
+description = "Batch orchestration for official vLLM and SGLang serving benchmarks"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0", "ruff>=0.12"]
+
+[project.scripts]
+autovbench = "autovbench.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["autovbench*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
