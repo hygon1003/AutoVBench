@@ -1,30 +1,28 @@
 # 在海光 DCU 上运行 AutoVBench
 
-本页说明怎样在海光 DCU 主机上跑通 AutoVBench：拉取官方镜像、创建容器、进入容器、拉起模型服务、安装 AutoVBench、做一轮小规模压测、查看结果。
+状态：待实测。
 
-AutoVBench 不启动模型服务。先在容器里把 SGLang 拉起来，等接口可用，再安装并压测。压测进程必须能访问到这个服务。
-
-示例固定使用完整 tag `harbor.sourcefind.cn:5443/hcu/admin/base/sglang:0.5.18-ubuntu22.04-dtk26041-py3.10`。光合推理 cookbook 的 `docker_images` 里，这个镜像用于 BW1100 / BW1000 / BW100 / K100_AI。请写全 tag。最新官方 tag 以 [docker_images 列表](https://github.com/HYGON-AI/dcu-inference-cookbook/blob/main/docs/model-deployment/docker_images.md) 为准。若改用 vLLM，按该列表中的完整 tag 换镜像，例如 `harbor.sourcefind.cn:5443/hcu/admin/base/vllm:0.21.0-ubuntu22.04-dtk2604-py3.10`。下面仍以 SGLang 0.5.18 为例。
-
-## 1. 拉取官方镜像
-
-需要登录时，先执行 `docker login harbor.sourcefind.cn:5443`。
+## 拉取镜像
 
 ```bash
+# 需要登录时再执行：docker login harbor.sourcefind.cn:5443
 docker pull harbor.sourcefind.cn:5443/hcu/admin/base/sglang:0.5.18-ubuntu22.04-dtk26041-py3.10
 ```
 
-## 2. 创建容器
-
-在宿主机准备代码和结果目录。仓库是私有的，克隆需要访问权限。已经有代码时，进入该目录即可。`/models` 换成你的权重目录。
+## 宿主机准备
 
 ```bash
+# 私有仓库，克隆需要权限。已有代码则进入该目录。
 git clone https://github.com/hygon1003/AutoVBench.git
 cd AutoVBench
 mkdir -p results
 ```
 
+## 创建容器
+
 ```bash
+# 镜像已含 DTK。不要挂载宿主机 /opt/dtk。
+# --privileged 会给容器较宽的宿主机权限。本文只是说明，不是改真实机器的授权。
 docker run -dit --name autovbench-dcu \
   --network=host \
   --ipc=host \
@@ -46,31 +44,24 @@ docker run -dit --name autovbench-dcu \
   /bin/bash
 ```
 
-官方镜像已经带有 DTK。驱动库按上面的方式挂成 `/opt/hyhal:/opt/hyhal:ro`。不要再把宿主机 `/opt/dtk` 挂进容器，否则会盖掉镜像里的 DTK，服务可能起不来。
-
 ## 进入容器
 
 ```bash
 docker exec -it autovbench-dcu bash
 ```
 
-下面的命令都在这个容器的 shell 里执行。
-
-容器里如果只放进一部分卡，编号从 0 重新开始。`HIP_VISIBLE_DEVICES` 填容器内编号。示例使用两张卡，所以是 `0,1`。不要填宿主机上的卡号。
-
 ```bash
+# 以下命令在容器内执行。
+# 只选真正空闲的卡。只绑入部分卡时，容器内编号从 0 起。
+# HIP_VISIBLE_DEVICES 填容器内编号。两张卡示例为 0,1，不要填宿主机卡号。
 export HIP_VISIBLE_DEVICES=0,1
 ```
 
-## 3. 启动模型服务
-
-下面是最小示例，只写了模型路径、卡数、监听地址和端口。把 `<your-model>` 换成 `/models` 下的权重目录名。你的模型和卡型请改用 cookbook 里对应 recipe 的命令（recipe 里常见写法是 `sglang serve`）。
-
-BW100（64G，无 FP8）按 BW1000 / BW150 一类 recipe，不要用 BW1100 的 FP8 recipe。
-
-服务放到后台，这样还能在同一个 shell 里安装和压测。日志在 `/results/sglang.log`（宿主机为 `results/sglang.log`）。`--tp-size 2` 对应上面两张卡。
+## 启动服务
 
 ```bash
+# 把 <your-model> 换成 /models 下的权重目录名。
+# 日志：容器 /results/sglang.log，宿主机 results/sglang.log。
 python -m sglang.launch_server \
   --model-path "/models/<your-model>" \
   --tp-size 2 \
@@ -79,31 +70,22 @@ python -m sglang.launch_server \
   > /results/sglang.log 2>&1 &
 ```
 
-确认服务已经起来。端口如果改过，下面的地址一起改：
-
 ```bash
 curl -sS http://127.0.0.1:30000/health
 curl -sS http://127.0.0.1:30000/v1/models
 ```
 
-`/health` 能通，并且 `/v1/models` 能看到模型后，再继续。
-
-## 4. 安装 AutoVBench
-
-仓库已挂到容器内 `/opt/AutoVBench`。镜像里已有 SGLang，这里只安装 AutoVBench，不要再装一份 SGLang。
+## 安装
 
 ```bash
 cd /opt/AutoVBench
 pip install -e .
 ```
 
-也可以装在另一个能够访问该服务的容器里。本示例装在同一个容器。
-
-## 5. 先做小规模试跑
-
-先跑探索，覆盖并发数=1 和并发数=4，长度 512/512，请求数 32。
+## 试跑
 
 ```bash
+# 并发数=1 和并发数=4，长度 512/512。
 cd /opt/AutoVBench
 autovbench run -o /results/explore.csv \
   --backend sglang \
@@ -114,18 +96,10 @@ autovbench run -o /results/explore.csv \
   --num-prompts 32
 ```
 
-`--model` 与服务使用的权重路径保持一致。API 上的模型名不同时，再加上 `--served-model-name`。
+## 查看结果
 
-传给官方 SGLang 客户端的 backend 默认是 `sglang-oai`。这一构建若使用别的 OpenAI backend 名称，加上 `--official-backend`，并写成那个名称。
-
-## 6. 查看结果
-
-CSV 在容器内 `/results/explore.csv`，也就是宿主机仓库下的 `results/explore.csv`。
-
-默认还会把官方原始结果写到 `/results/explore_raw/`，包括 JSONL，以及每组的标准输出和标准错误。并发数=1 对应 `c1-in512-out512.jsonl`、`c1-in512-out512.stdout`、`c1-in512-out512.stderr`。
-
-CSV 列跟随 vLLM 官方聚合字段。SGLang 的结果映射到这些列上。
-
-## 7. 正式全量（可选）
-
-正式全量使用默认矩阵：并发 1、4、8、16、32、64、128，长度 512/512、4096/1024、16384/1024。配置文件里已经是这组矩阵时，去掉第 5 步中的 `--concurrency` 和 `--input-output`。
+```bash
+# CSV：容器 /results/explore.csv，宿主机 results/explore.csv。
+# 原始结果：容器 /results/explore_raw/。并发数=1 的文件名为 c1-in512-out512.jsonl、.stdout、.stderr。
+ls /results/explore.csv /results/explore_raw
+```
