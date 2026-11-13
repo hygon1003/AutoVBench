@@ -118,6 +118,7 @@ input_output:
     assert (raw_dir / "c1-in16-out8.stderr").read_text(encoding="utf-8") == "bench-warn\n"
     bench = next(item for item in read_invocations(log_path) if "bench" in item)
     assert bench[bench.index("--dataset-name") + 1] == "random"
+    assert bench[bench.index("--num-warmups") + 1] == "10"
     assert "--save-detailed" not in bench
 
 
@@ -175,6 +176,8 @@ input_output:
                 "random",
                 "--random-range-ratio",
                 "0",
+                "--warmup-requests",
+                "0",
                 "--extra-args",
                 "--warmup-requests",
                 "1",
@@ -197,6 +200,8 @@ input_output:
     assert bench[bench.index("--request-rate") + 1] == "1.5"
     assert bench[bench.index("--backend") + 1] == "openai"
     assert "--ignore-eos" not in bench
+    assert bench.count("--num-warmups") == 1
+    assert bench[bench.index("--num-warmups") + 1] == "0"
     assert bench[-2:] == ["--warmup-requests", "1"]
 
 
@@ -244,6 +249,7 @@ def test_cli_only_sglang_defaults(tmp_path: Path) -> None:
     assert bench[bench.index("--backend") + 1] == "sglang-oai"
     assert bench[bench.index("--dataset-name") + 1] == "random-ids"
     assert bench[bench.index("--random-range-ratio") + 1] == "1"
+    assert bench[bench.index("--warmup-requests") + 1] == "10"
     assert "--output-details" not in bench
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..models import BenchmarkConfig, CommandResult, Workload
-from .base import execute, format_cli_number, query_version
+from .base import argv_has_flag, execute, format_cli_number, query_version
 
 
 class SGLangRunner:
@@ -65,6 +65,8 @@ class SGLangRunner:
             )
         if not self.config.ignore_eos:
             command.append("--disable-ignore-eos")
+        if not argv_has_flag(self.config.extra_args, "--warmup-requests"):
+            command.extend(["--warmup-requests", str(self.config.warmup_requests)])
         command.extend(self.config.extra_args)
         return command
 

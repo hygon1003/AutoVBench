@@ -37,6 +37,7 @@ class BenchmarkConfig:
     official_backend: str | None = None
     dataset_name: str | None = None
     random_range_ratio: float | None = None
+    warmup_requests: int = 10
 
     def workloads(self) -> tuple[Workload, ...]:
         return tuple(

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .. import __version__
 from ..models import BenchmarkConfig, CommandResult, Workload
-from .base import execute, format_cli_number, query_version
+from .base import argv_has_flag, execute, format_cli_number, query_version
 
 
 class VLLMRunner:
@@ -75,6 +75,8 @@ class VLLMRunner:
             )
         if self.config.ignore_eos:
             command.append("--ignore-eos")
+        if not argv_has_flag(self.config.extra_args, "--num-warmups"):
+            command.extend(["--num-warmups", str(self.config.warmup_requests)])
         command.extend(self.config.extra_args)
         return command
 

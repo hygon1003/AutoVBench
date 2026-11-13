@@ -41,7 +41,7 @@ autovbench run -o results.csv \
   --input-output 512:512,4096:1024
 ```
 
-还可覆盖：`--tokenizer`、`--served-model-name`、`--num-prompts`、`--seed`、`--request-rate`、`--ignore-eos` / `--no-ignore-eos`、`--keep-raw-results` / `--no-keep-raw-results`、`--vllm-executable`、`--sglang-python`、`--official-backend`、`--dataset-name`、`--random-range-ratio`、`--extra-args`。
+还可覆盖：`--tokenizer`、`--served-model-name`、`--num-prompts`、`--warmup-requests`、`--seed`、`--request-rate`、`--ignore-eos` / `--no-ignore-eos`、`--keep-raw-results` / `--no-keep-raw-results`、`--vllm-executable`、`--sglang-python`、`--official-backend`、`--dataset-name`、`--random-range-ratio`、`--extra-args`。
 
 `--extra-args` 放在命令最后，后面的参数会原样追加给官方命令，例如 `--extra-args --foo 1`。
 
@@ -58,6 +58,8 @@ autovbench run -o results.csv \
 
 - vLLM：`vllm bench serve`。默认 `--dataset-name random`、`--random-range-ratio 0`、`--backend vllm`。
 - SGLang：`<sglang_python> -m sglang.bench_serving`。默认 `--dataset-name random-ids`、`--random-range-ratio 1`、`--backend sglang-oai`。
+
+默认预热 10 条，使用官方参数（vLLM `--num-warmups`，SGLang `--warmup-requests`），不计入 CSV 成绩；设为 0 关闭。
 
 `sglang-oai` 表示走 OpenAI 兼容接口。个别版本名字不同时，用 `official_backend` 或 `--official-backend` 改。
 

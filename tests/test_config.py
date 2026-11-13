@@ -33,6 +33,7 @@ def test_load_config_and_expand_matrix(tmp_path: Path) -> None:
     config = load_config(write_config(tmp_path / "config.yaml"))
 
     assert config.backend == "vllm"
+    assert config.warmup_requests == 10
     assert config.keep_raw_results is True
     assert config.resolved_official_backend() == "vllm"
     assert config.resolved_dataset_name() == "random"
@@ -48,6 +49,7 @@ def test_example_defaults() -> None:
 
     assert config.concurrency == (1, 4, 8, 16, 32, 64, 128)
     assert config.input_output == ((512, 512), (4096, 1024), (16384, 1024))
+    assert config.warmup_requests == 10
     assert config.keep_raw_results is True
     assert config.resolved_dataset_name() == "random"
     assert config.resolved_random_range_ratio() == 0
@@ -112,6 +114,23 @@ def test_invalid_config(tmp_path: Path, replacement: str, message: str) -> None:
     path.write_text(text, encoding="utf-8")
 
     with pytest.raises(ConfigError, match=message):
+        load_config(path)
+
+
+@pytest.mark.parametrize("warmup", [0, 25])
+def test_warmup_requests_accepts_zero_and_custom(tmp_path: Path, warmup: int) -> None:
+    config = load_config(
+        write_config(tmp_path / "config.yaml", f"warmup_requests: {warmup}\n")
+    )
+
+    assert config.warmup_requests == warmup
+
+
+@pytest.mark.parametrize("extra", ["warmup_requests: -1\n", "warmup_requests: false\n"])
+def test_invalid_warmup_requests(tmp_path: Path, extra: str) -> None:
+    path = write_config(tmp_path / "config.yaml", extra)
+
+    with pytest.raises(ConfigError, match="warmup_requests"):
         load_config(path)
 
 

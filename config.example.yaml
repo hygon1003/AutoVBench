@@ -18,6 +18,8 @@ sglang_python: python
 # random_range_ratio: 0
 
 num_prompts: 100
+# 预热请求数。vLLM 传 --num-warmups，SGLang 传 --warmup-requests。不计入 CSV。0 关闭。
+warmup_requests: 10
 concurrency: [1, 4, 8, 16, 32, 64, 128]
 input_output:
   - input_len: 512
