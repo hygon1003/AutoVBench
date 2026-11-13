@@ -46,6 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated input:output pairs, for example 512:512,4096:1024",
     )
     run_parser.add_argument("--num-prompts", type=int)
+    run_parser.add_argument(
+        "--warmup-requests",
+        type=int,
+        help="official warmup count; vLLM --num-warmups, SGLang --warmup-requests; 0 disables",
+    )
     run_parser.add_argument("--seed", type=int)
     run_parser.add_argument("--request-rate", type=float)
     run_parser.add_argument("--ignore-eos", action=argparse.BooleanOptionalAction)
@@ -84,6 +89,8 @@ def collect_overrides(args: argparse.Namespace) -> dict[str, Any]:
         overrides["input_output"] = parse_input_output_text(args.input_output)
     if args.num_prompts is not None:
         overrides["num_prompts"] = args.num_prompts
+    if args.warmup_requests is not None:
+        overrides["warmup_requests"] = args.warmup_requests
     if args.seed is not None:
         overrides["seed"] = args.seed
     if args.request_rate is not None:

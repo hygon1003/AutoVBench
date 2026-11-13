@@ -19,6 +19,11 @@ class RunnerError(RuntimeError):
         self.stderr = stderr
 
 
+def argv_has_flag(args: Sequence[str], flag: str) -> bool:
+    prefix = f"{flag}="
+    return any(arg == flag or arg.startswith(prefix) for arg in args)
+
+
 def format_cli_number(value: float) -> str:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))

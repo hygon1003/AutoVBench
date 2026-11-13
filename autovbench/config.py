@@ -121,6 +121,13 @@ def build_config(data: dict[str, Any]) -> BenchmarkConfig:
         )
 
     num_prompts = _positive_int(data.get("num_prompts", 1000), "num_prompts")
+    warmup_requests = data.get("warmup_requests", 10)
+    if (
+        isinstance(warmup_requests, bool)
+        or not isinstance(warmup_requests, int)
+        or warmup_requests < 0
+    ):
+        raise ConfigError("warmup_requests must be a non-negative integer")
     seed = data.get("seed", 1)
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
         raise ConfigError("seed must be a non-negative integer")
@@ -175,6 +182,7 @@ def build_config(data: dict[str, Any]) -> BenchmarkConfig:
         official_backend=official_backend,
         dataset_name=dataset_name,
         random_range_ratio=range_ratio,
+        warmup_requests=warmup_requests,
     )
 
 

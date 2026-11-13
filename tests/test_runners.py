@@ -35,6 +35,7 @@ def test_vllm_command_uses_official_cli(tmp_path: Path) -> None:
     assert command[command.index("--backend") + 1] == "vllm"
     assert command[command.index("--dataset-name") + 1] == "random"
     assert command[command.index("--random-range-ratio") + 1] == "0"
+    assert command[command.index("--num-warmups") + 1] == "10"
     assert "--save-result" in command
     assert "--save-detailed" not in command
     assert "random_input_len=128" in command
@@ -65,6 +66,7 @@ def test_sglang_command_uses_official_module(tmp_path: Path) -> None:
     assert command[command.index("--backend") + 1] == "sglang-oai"
     assert command[command.index("--dataset-name") + 1] == "random-ids"
     assert command[command.index("--random-range-ratio") + 1] == "1"
+    assert command[command.index("--warmup-requests") + 1] == "10"
     assert "--output-file" in command
     assert "--output-details" not in command
 
@@ -82,6 +84,62 @@ def test_sglang_official_flags_can_be_overridden(tmp_path: Path) -> None:
     assert command[command.index("--backend") + 1] == "sglang"
     assert command[command.index("--dataset-name") + 1] == "random"
     assert command[command.index("--random-range-ratio") + 1] == "0"
+
+
+@pytest.mark.parametrize("warmup", [0, 7])
+def test_vllm_passes_configured_warmup(tmp_path: Path, warmup: int) -> None:
+    command = VLLMRunner(
+        config("vllm", warmup_requests=warmup, extra_args=("--foo", "bar"))
+    ).build_command(Workload(4, 128, 64), tmp_path, "result.json", "0.19.1")
+
+    assert command[command.index("--num-warmups") + 1] == str(warmup)
+    assert command.index("--num-warmups") < command.index("--foo")
+
+
+def test_vllm_keeps_num_warmups_from_extra_args(tmp_path: Path) -> None:
+    command = VLLMRunner(
+        config("vllm", warmup_requests=10, extra_args=("--num-warmups", "2"))
+    ).build_command(Workload(4, 128, 64), tmp_path, "result.json", "0.19.1")
+
+    assert command.count("--num-warmups") == 1
+    assert command[command.index("--num-warmups") + 1] == "2"
+
+
+def test_vllm_keeps_equals_form_num_warmups_from_extra_args(tmp_path: Path) -> None:
+    command = VLLMRunner(
+        config("vllm", warmup_requests=10, extra_args=("--num-warmups=4",))
+    ).build_command(Workload(4, 128, 64), tmp_path, "result.json", "0.19.1")
+
+    assert "--num-warmups" not in command
+    assert command[-1] == "--num-warmups=4"
+
+
+@pytest.mark.parametrize("warmup", [0, 7])
+def test_sglang_passes_configured_warmup(tmp_path: Path, warmup: int) -> None:
+    command = SGLangRunner(
+        config("sglang", warmup_requests=warmup, extra_args=("--foo", "bar"))
+    ).build_command(Workload(4, 128, 64), tmp_path / "result.jsonl")
+
+    assert command[command.index("--warmup-requests") + 1] == str(warmup)
+    assert command.index("--warmup-requests") < command.index("--foo")
+
+
+def test_sglang_keeps_warmup_requests_from_extra_args(tmp_path: Path) -> None:
+    command = SGLangRunner(
+        config("sglang", warmup_requests=10, extra_args=("--warmup-requests", "2"))
+    ).build_command(Workload(4, 128, 64), tmp_path / "result.jsonl")
+
+    assert command.count("--warmup-requests") == 1
+    assert command[command.index("--warmup-requests") + 1] == "2"
+
+
+def test_sglang_does_not_treat_num_warmups_as_its_flag(tmp_path: Path) -> None:
+    command = SGLangRunner(
+        config("sglang", extra_args=("--num-warmups", "2"))
+    ).build_command(Workload(4, 128, 64), tmp_path / "result.jsonl")
+
+    assert command[command.index("--warmup-requests") + 1] == "10"
+    assert command[-2:] == ["--num-warmups", "2"]
 
 
 def test_version_records_any_parsed_release(monkeypatch: pytest.MonkeyPatch) -> None:
