@@ -1,8 +1,8 @@
 # 在海光 DCU 上运行 AutoVBench
 
-本页说明怎样在海光 DCU 主机上跑通 AutoVBench：拉取官方镜像、启动容器、拉起模型服务、安装 AutoVBench、做一轮小规模压测、查看结果。
+本页说明怎样在海光 DCU 主机上跑通 AutoVBench：拉取官方镜像、创建容器、进入容器、拉起模型服务、安装 AutoVBench、做一轮小规模压测、查看结果。
 
-AutoVBench 不启动模型服务。先把 SGLang 拉起来，等接口可用，再在同一个容器里安装并压测。压测进程必须能访问到这个服务。
+AutoVBench 不启动模型服务。先在容器里把 SGLang 拉起来，等接口可用，再安装并压测。压测进程必须能访问到这个服务。
 
 示例固定使用完整 tag `harbor.sourcefind.cn:5443/hcu/admin/base/sglang:0.5.18-ubuntu22.04-dtk26041-py3.10`。光合推理 cookbook 的 `docker_images` 里，这个镜像用于 BW1100 / BW1000 / BW100 / K100_AI。请写全 tag。最新官方 tag 以 [docker_images 列表](https://github.com/HYGON-AI/dcu-inference-cookbook/blob/main/docs/model-deployment/docker_images.md) 为准。若改用 vLLM，按该列表中的完整 tag 换镜像，例如 `harbor.sourcefind.cn:5443/hcu/admin/base/vllm:0.21.0-ubuntu22.04-dtk2604-py3.10`。下面仍以 SGLang 0.5.18 为例。
 
@@ -14,9 +14,9 @@ AutoVBench 不启动模型服务。先把 SGLang 拉起来，等接口可用，�
 docker pull harbor.sourcefind.cn:5443/hcu/admin/base/sglang:0.5.18-ubuntu22.04-dtk26041-py3.10
 ```
 
-## 2. 创建并启动容器
+## 2. 创建容器
 
-在宿主机准备代码和结果目录。已有仓库时，进入该目录即可，不必再克隆。`/models` 换成你的权重目录。
+在宿主机准备代码和结果目录。仓库是私有的，克隆需要访问权限。已经有代码时，进入该目录即可。`/models` 换成你的权重目录。
 
 ```bash
 git clone https://github.com/hygon1003/AutoVBench.git
@@ -25,29 +25,42 @@ mkdir -p results
 ```
 
 ```bash
-docker run -d --name autovbench-dcu \
+docker run -dit --name autovbench-dcu \
   --network=host \
   --ipc=host \
-  --group-add video \
-  --cap-add SYS_PTRACE \
-  --security-opt seccomp=unconfined \
+  --shm-size=512G \
   --device=/dev/kfd \
   --device=/dev/dri \
   --device=/dev/mkfd \
-  -e HIP_VISIBLE_DEVICES=0,1 \
   -v /opt/hyhal:/opt/hyhal:ro \
+  --group-add video \
+  --cap-add=SYS_PTRACE \
+  --security-opt seccomp=unconfined \
+  --privileged \
+  --ulimit stack=-1:-1 \
+  --ulimit memlock=-1:-1 \
   -v /models:/models \
   -v "$PWD/results":/results \
   -v "$PWD":/opt/AutoVBench \
   harbor.sourcefind.cn:5443/hcu/admin/base/sglang:0.5.18-ubuntu22.04-dtk26041-py3.10 \
-  sleep infinity
+  /bin/bash
 ```
-
-`sleep infinity` 只让容器保持运行。后面的服务和压测都用 `docker exec`。
 
 官方镜像已经带有 DTK。驱动库按上面的方式挂成 `/opt/hyhal:/opt/hyhal:ro`。不要再把宿主机 `/opt/dtk` 挂进容器，否则会盖掉镜像里的 DTK，服务可能起不来。
 
+## 进入容器
+
+```bash
+docker exec -it autovbench-dcu bash
+```
+
+下面的命令都在这个容器的 shell 里执行。
+
 容器里如果只放进一部分卡，编号从 0 重新开始。`HIP_VISIBLE_DEVICES` 填容器内编号。示例使用两张卡，所以是 `0,1`。不要填宿主机上的卡号。
+
+```bash
+export HIP_VISIBLE_DEVICES=0,1
+```
 
 ## 3. 启动模型服务
 
@@ -55,17 +68,16 @@ docker run -d --name autovbench-dcu \
 
 BW100（64G，无 FP8）按 BW1000 / BW150 一类 recipe，不要用 BW1100 的 FP8 recipe。
 
-```bash
-docker exec -d autovbench-dcu bash -lc \
-  'python -m sglang.launch_server \
-    --model-path "/models/<your-model>" \
-    --tp-size 2 \
-    --host 0.0.0.0 \
-    --port 30000 \
-    > /results/sglang.log 2>&1'
-```
+服务放到后台，这样还能在同一个 shell 里安装和压测。日志在 `/results/sglang.log`（宿主机为 `results/sglang.log`）。`--tp-size 2` 对应上面两张卡。
 
-`--tp-size 2` 表示两张卡，与上一步的 `HIP_VISIBLE_DEVICES=0,1` 一致。日志在宿主机 `results/sglang.log`。
+```bash
+python -m sglang.launch_server \
+  --model-path "/models/<your-model>" \
+  --tp-size 2 \
+  --host 0.0.0.0 \
+  --port 30000 \
+  > /results/sglang.log 2>&1 &
+```
 
 确认服务已经起来。端口如果改过，下面的地址一起改：
 
@@ -78,10 +90,11 @@ curl -sS http://127.0.0.1:30000/v1/models
 
 ## 4. 安装 AutoVBench
 
-第 2 步已经把仓库挂到容器内 `/opt/AutoVBench`。镜像里已有 SGLang，这里只安装 AutoVBench，不要再装一份 SGLang。
+仓库已挂到容器内 `/opt/AutoVBench`。镜像里已有 SGLang，这里只安装 AutoVBench，不要再装一份 SGLang。
 
 ```bash
-docker exec -it autovbench-dcu bash -lc 'cd /opt/AutoVBench && pip install -e .'
+cd /opt/AutoVBench
+pip install -e .
 ```
 
 也可以装在另一个能够访问该服务的容器里。本示例装在同一个容器。
@@ -91,14 +104,14 @@ docker exec -it autovbench-dcu bash -lc 'cd /opt/AutoVBench && pip install -e .'
 先跑探索，覆盖并发数=1 和并发数=4，长度 512/512，请求数 32。
 
 ```bash
-docker exec -it autovbench-dcu bash -lc \
-  'cd /opt/AutoVBench && autovbench run -o /results/explore.csv \
-    --backend sglang \
-    --base-url http://127.0.0.1:30000 \
-    --model "/models/<your-model>" \
-    --concurrency 1,4 \
-    --input-output 512:512 \
-    --num-prompts 32'
+cd /opt/AutoVBench
+autovbench run -o /results/explore.csv \
+  --backend sglang \
+  --base-url http://127.0.0.1:30000 \
+  --model "/models/<your-model>" \
+  --concurrency 1,4 \
+  --input-output 512:512 \
+  --num-prompts 32
 ```
 
 `--model` 与服务使用的权重路径保持一致。API 上的模型名不同时，再加上 `--served-model-name`。
