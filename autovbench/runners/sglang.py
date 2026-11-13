@@ -1,11 +1,11 @@
-"""SGLang 0.5.x official benchmark runner."""
+"""SGLang official benchmark runner."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from ..models import BenchmarkConfig, CommandResult, Workload
-from .base import execute, require_version
+from .base import execute, format_cli_number, query_version
 
 
 class SGLangRunner:
@@ -13,13 +13,12 @@ class SGLangRunner:
         self.config = config
 
     def check_version(self) -> str:
-        return require_version(
+        return query_version(
             [
                 self.config.python_executable,
                 "-c",
-                ("from importlib.metadata import version;print(version('sglang'))"),
+                "from importlib.metadata import version;print(version('sglang'))",
             ],
-            prefix="0.5.",
             tool_name="SGLang",
         )
 
@@ -33,19 +32,19 @@ class SGLangRunner:
             "-m",
             "sglang.bench_serving",
             "--backend",
-            "sglang",
+            self.config.resolved_official_backend(),
             "--base-url",
             self.config.base_url,
             "--model",
             self.config.model,
             "--dataset-name",
-            "random",
+            self.config.resolved_dataset_name(),
             "--random-input-len",
             str(workload.input_len),
             "--random-output-len",
             str(workload.output_len),
             "--random-range-ratio",
-            "0",
+            format_cli_number(self.config.resolved_random_range_ratio()),
             "--num-prompts",
             str(self.config.num_prompts),
             "--max-concurrency",
@@ -61,7 +60,9 @@ class SGLangRunner:
         if self.config.served_model_name:
             command.extend(["--served-model-name", self.config.served_model_name])
         if self.config.request_rate is not None:
-            command.extend(["--request-rate", str(self.config.request_rate)])
+            command.extend(
+                ["--request-rate", format_cli_number(self.config.request_rate)]
+            )
         if not self.config.ignore_eos:
             command.append("--disable-ignore-eos")
         command.extend(self.config.extra_args)
@@ -73,6 +74,6 @@ class SGLangRunner:
         result_dir: Path,
         client_version: str,
     ) -> CommandResult:
-        del client_version  # SGLang has no metadata CLI; mapper adds this field.
+        del client_version  # Recorded by the mapper; SGLang has no metadata flag.
         result_path = result_dir / f"{workload.name}.jsonl"
         return execute(self.build_command(workload, result_path), result_path)

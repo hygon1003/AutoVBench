@@ -29,7 +29,40 @@ def _string_list(value: Any, name: str) -> tuple[str, ...]:
     return tuple(value)
 
 
-def load_config(path: str | Path) -> BenchmarkConfig:
+def _optional_text(value: Any, name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise ConfigError(f"{name} must be a non-empty string")
+    return value
+
+
+def parse_concurrency_text(value: str) -> list[int]:
+    parts = [part.strip() for part in value.split(",")]
+    if not parts or any(not part for part in parts):
+        raise ConfigError("concurrency must be a comma-separated list of positive integers")
+    parsed: list[int] = []
+    for part in parts:
+        if not part.isdigit():
+            raise ConfigError("concurrency must be a comma-separated list of positive integers")
+        parsed.append(int(part))
+    return parsed
+
+
+def parse_input_output_text(value: str) -> list[dict[str, int]]:
+    parts = [part.strip() for part in value.split(",")]
+    if not parts or any(not part for part in parts):
+        raise ConfigError("input-output must look like 512:512,4096:1024")
+    pairs: list[dict[str, int]] = []
+    for part in parts:
+        left, separator, right = part.partition(":")
+        if not separator or not left.isdigit() or not right.isdigit():
+            raise ConfigError("input-output must look like 512:512,4096:1024")
+        pairs.append({"input_len": int(left), "output_len": int(right)})
+    return pairs
+
+
+def load_mapping(path: str | Path) -> dict[str, Any]:
     config_path = Path(path)
     try:
         data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
@@ -37,11 +70,15 @@ def load_config(path: str | Path) -> BenchmarkConfig:
         raise ConfigError(f"configuration file not found: {config_path}") from exc
     except yaml.YAMLError as exc:
         raise ConfigError(f"invalid YAML: {exc}") from exc
-
     if not isinstance(data, dict):
         raise ConfigError("configuration root must be a mapping")
+    return data
 
+
+def build_config(data: dict[str, Any]) -> BenchmarkConfig:
     backend = data.get("backend")
+    if backend is None:
+        raise ConfigError("backend is required")
     if backend not in {"vllm", "sglang"}:
         raise ConfigError("backend must be 'vllm' or 'sglang'")
 
@@ -56,21 +93,17 @@ def load_config(path: str | Path) -> BenchmarkConfig:
     if not isinstance(model, str) or not model:
         raise ConfigError("model is required")
 
-    served_model_name = data.get("served_model_name")
-    if served_model_name is not None and (
-        not isinstance(served_model_name, str) or not served_model_name
-    ):
-        raise ConfigError("served_model_name must be a non-empty string")
-
-    tokenizer = data.get("tokenizer")
-    if tokenizer is not None and (not isinstance(tokenizer, str) or not tokenizer):
-        raise ConfigError("tokenizer must be a non-empty string")
+    served_model_name = _optional_text(data.get("served_model_name"), "served_model_name")
+    tokenizer = _optional_text(data.get("tokenizer"), "tokenizer")
+    official_backend = _optional_text(data.get("official_backend"), "official_backend")
+    dataset_name = _optional_text(data.get("dataset_name"), "dataset_name")
 
     concurrency_raw = data.get("concurrency")
     if not isinstance(concurrency_raw, list) or not concurrency_raw:
         raise ConfigError("concurrency must be a non-empty list")
     concurrency = tuple(
-        _positive_int(value, f"concurrency[{index}]") for index, value in enumerate(concurrency_raw)
+        _positive_int(value, f"concurrency[{index}]")
+        for index, value in enumerate(concurrency_raw)
     )
 
     pairs_raw = data.get("input_output")
@@ -104,9 +137,17 @@ def load_config(path: str | Path) -> BenchmarkConfig:
     if not isinstance(ignore_eos, bool):
         raise ConfigError("ignore_eos must be a boolean")
 
-    keep_raw_results = data.get("keep_raw_results", False)
+    keep_raw_results = data.get("keep_raw_results", True)
     if not isinstance(keep_raw_results, bool):
         raise ConfigError("keep_raw_results must be a boolean")
+
+    range_ratio = data.get("random_range_ratio")
+    if range_ratio is not None:
+        if isinstance(range_ratio, bool) or not isinstance(range_ratio, (int, float)):
+            raise ConfigError("random_range_ratio must be a non-negative number")
+        if range_ratio < 0:
+            raise ConfigError("random_range_ratio must be a non-negative number")
+        range_ratio = float(range_ratio)
 
     executable = data.get("vllm_executable", "vllm")
     python_executable = data.get("sglang_python", "python")
@@ -131,4 +172,11 @@ def load_config(path: str | Path) -> BenchmarkConfig:
         python_executable=python_executable,
         keep_raw_results=keep_raw_results,
         extra_args=_string_list(data.get("extra_args"), "extra_args"),
+        official_backend=official_backend,
+        dataset_name=dataset_name,
+        random_range_ratio=range_ratio,
     )
+
+
+def load_config(path: str | Path) -> BenchmarkConfig:
+    return build_config(load_mapping(path))

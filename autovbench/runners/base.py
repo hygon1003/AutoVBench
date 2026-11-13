@@ -13,15 +13,26 @@ from ..models import CommandResult
 class RunnerError(RuntimeError):
     """Raised when an official benchmark command cannot be used."""
 
+    def __init__(self, message: str, *, stdout: str = "", stderr: str = "") -> None:
+        super().__init__(message)
+        self.stdout = stdout
+        self.stderr = stderr
 
-def extract_version(output: str) -> str:
+
+def format_cli_number(value: float) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return format(value, "g")
+
+
+def extract_version(output: str) -> str | None:
     match = re.search(r"(?<!\d)(\d+\.\d+\.\d+(?:[a-zA-Z0-9.+-]*))", output)
     if not match:
-        raise RunnerError(f"could not parse version from: {output.strip()!r}")
+        return None
     return match.group(1)
 
 
-def require_version(command: Sequence[str], prefix: str, tool_name: str) -> str:
+def query_version(command: Sequence[str], tool_name: str) -> str:
     try:
         completed = subprocess.run(
             list(command),
@@ -35,10 +46,13 @@ def require_version(command: Sequence[str], prefix: str, tool_name: str) -> str:
         details = (exc.stderr or exc.stdout or "").strip()
         raise RunnerError(f"failed to query {tool_name} version: {details}") from exc
 
-    version = extract_version(f"{completed.stdout}\n{completed.stderr}")
-    if not version.startswith(prefix):
-        raise RunnerError(f"unsupported {tool_name} version {version}; expected {prefix}x")
-    return version
+    output = f"{completed.stdout}\n{completed.stderr}".strip()
+    version = extract_version(output)
+    if version:
+        return version
+    if not output:
+        return "unknown"
+    return output.splitlines()[0]
 
 
 def execute(command: Sequence[str], raw_result_path: Path) -> CommandResult:
@@ -54,11 +68,17 @@ def execute(command: Sequence[str], raw_result_path: Path) -> CommandResult:
     except subprocess.CalledProcessError as exc:
         details = (exc.stderr or exc.stdout or "").strip()
         raise RunnerError(
-            f"official benchmark exited with code {exc.returncode}: {details}"
+            f"official benchmark exited with code {exc.returncode}: {details}",
+            stdout=exc.stdout or "",
+            stderr=exc.stderr or "",
         ) from exc
 
     if not raw_result_path.is_file():
-        raise RunnerError(f"official benchmark succeeded but did not create {raw_result_path}")
+        raise RunnerError(
+            f"official benchmark succeeded but did not create {raw_result_path}",
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
     return CommandResult(
         raw_result_path=raw_result_path,
         stdout=completed.stdout,

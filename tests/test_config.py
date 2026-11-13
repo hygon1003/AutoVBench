@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from autovbench.config import ConfigError, load_config
+from autovbench.config import (
+    ConfigError,
+    load_config,
+    parse_concurrency_text,
+    parse_input_output_text,
+)
 
 
 def write_config(path: Path, extra: str = "") -> Path:
@@ -28,9 +33,59 @@ def test_load_config_and_expand_matrix(tmp_path: Path) -> None:
     config = load_config(write_config(tmp_path / "config.yaml"))
 
     assert config.backend == "vllm"
+    assert config.keep_raw_results is True
+    assert config.resolved_official_backend() == "vllm"
+    assert config.resolved_dataset_name() == "random"
+    assert config.resolved_random_range_ratio() == 0
     assert [workload.name for workload in config.workloads()] == [
         "c1-in16-out8",
         "c4-in16-out8",
+    ]
+
+
+def test_example_defaults() -> None:
+    config = load_config(Path(__file__).resolve().parents[1] / "config.example.yaml")
+
+    assert config.concurrency == (1, 4, 8, 16, 32, 64, 128)
+    assert config.input_output == ((512, 512), (4096, 1024), (16384, 1024))
+    assert config.keep_raw_results is True
+    assert config.resolved_dataset_name() == "random"
+    assert config.resolved_random_range_ratio() == 0
+
+
+def test_sglang_flag_defaults(tmp_path: Path) -> None:
+    path = write_config(tmp_path / "config.yaml")
+    text = path.read_text(encoding="utf-8").replace("backend: vllm", "backend: sglang")
+    path.write_text(text, encoding="utf-8")
+
+    config = load_config(path)
+
+    assert config.resolved_official_backend() == "sglang-oai"
+    assert config.resolved_dataset_name() == "random-ids"
+    assert config.resolved_random_range_ratio() == 1
+
+
+def test_explicit_zero_ratio_is_kept(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path / "config.yaml",
+        "random_range_ratio: 0\ndataset_name: random\nofficial_backend: sglang\n",
+    )
+    text = path.read_text(encoding="utf-8").replace("backend: vllm", "backend: sglang", 1)
+    path.write_text(text, encoding="utf-8")
+
+    config = load_config(path)
+
+    assert config.backend == "sglang"
+    assert config.resolved_official_backend() == "sglang"
+    assert config.resolved_dataset_name() == "random"
+    assert config.resolved_random_range_ratio() == 0
+
+
+def test_list_text_parsers() -> None:
+    assert parse_concurrency_text("1, 4, 8") == [1, 4, 8]
+    assert parse_input_output_text("512:512, 4096:1024") == [
+        {"input_len": 512, "output_len": 512},
+        {"input_len": 4096, "output_len": 1024},
     ]
 
 
@@ -57,4 +112,11 @@ def test_invalid_config(tmp_path: Path, replacement: str, message: str) -> None:
     path.write_text(text, encoding="utf-8")
 
     with pytest.raises(ConfigError, match=message):
+        load_config(path)
+
+
+def test_negative_range_ratio(tmp_path: Path) -> None:
+    path = write_config(tmp_path / "config.yaml", "random_range_ratio: -0.1\n")
+
+    with pytest.raises(ConfigError, match="random_range_ratio"):
         load_config(path)
