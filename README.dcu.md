@@ -12,7 +12,8 @@ docker pull harbor.sourcefind.cn:5443/hcu/admin/base/sglang:0.5.18-ubuntu22.04-d
 ## 宿主机准备
 
 ```bash
-# 私有仓库，克隆需要权限。已有源码或发布归档则进入该目录，不要为一次验证再 clone。
+# 私有仓库，克隆或拉取需要权限。已有仓库时改用：cd AutoVBench && git pull
+git clone https://github.com/hygon1003/AutoVBench.git
 cd AutoVBench
 mkdir -p results
 ```
