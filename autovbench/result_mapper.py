@@ -1,9 +1,12 @@
-"""Map official benchmark result files to a stable vLLM-based CSV schema."""
+"""Map official benchmark JSON onto vLLM bench-serve aggregate columns.
+
+SGLang-only fields are dropped. Missing values stay empty. Throughput, latency,
+and failed counts are copied from the official payload and are not recomputed.
+"""
 
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +58,7 @@ CSV_FIELDS = (
     "p99_e2el_ms",
 )
 
+# SGLang names that mean the same aggregate as a vLLM column.
 SGLANG_ALIASES = {
     "total_token_throughput": "total_throughput",
     "mean_e2el_ms": "mean_e2e_latency_ms",
@@ -117,17 +121,15 @@ def map_result(
 
     for field in CSV_FIELDS:
         value = raw.get(field)
-        if value is not None and isinstance(value, (str, int, float, bool)):
+        if isinstance(value, (str, int, float, bool)) and value is not None:
             row[field] = value
 
     if config.backend == "sglang":
-        row["date"] = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         for target, source in SGLANG_ALIASES.items():
+            if row[target] != "":
+                continue
             value = raw.get(source)
             if isinstance(value, (str, int, float, bool)) and value is not None:
                 row[target] = value
-        completed = raw.get("completed")
-        if isinstance(completed, int) and not isinstance(completed, bool):
-            row["failed"] = max(config.num_prompts - completed, 0)
 
     return row

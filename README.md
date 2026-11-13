@@ -1,140 +1,75 @@
 # AutoVBench
 
-AutoVBench 用于批量编排 vLLM 与 SGLang 官方在线服务 benchmark，并把每组
-workload 的官方结果统一写入 CSV。它不启动模型服务、不实现自己的压测算法，
-也不提供离线 benchmark。
+AutoVBench 用来给已经启动的大模型服务做批量压测。它只调用官方客户端，按并发和输入/输出长度一组组跑完，把每组结果收成一张 CSV。
 
-## 支持范围
+用它，就不用自己写发压和打分，也不用一条条手敲官方命令。不用它，就要反复执行 `vllm bench serve` 或 `python -m sglang.bench_serving`，或者另写客户端。
 
-- vLLM benchmark 客户端：`0.18.x`，推荐基准版本 `0.18.1`
-- SGLang benchmark 客户端：`0.5.x`，推荐基准版本 `0.5.10`
-- workload 维度：并发数、随机输入 token 长度、随机输出 token 长度
-- 目标：已经启动且可从 benchmark 客户端访问的模型服务
-
-AutoVBench 会在任务开始前检查客户端版本。`vllm 0.15.x`、`sglang 0.4.x`
-等跨系列版本会被拒绝。同系列不同小版本可能存在官方字段差异，无法映射的值在
-CSV 中留空。服务端与 benchmark 客户端建议使用相同版本系列。
-
-## 工作原理
-
-- vLLM：调用官方 `vllm bench serve`
-- SGLang：调用官方 `python -m sglang.bench_serving`
-- AutoVBench 只构造命令、执行 workload 矩阵、读取官方 JSON/JSONL、转换 CSV
-- 吞吐、TTFT、TPOT、ITL、E2EL 均使用官方 benchmark 的结果，不重新计算
+本工具不启动模型服务。吞吐和延迟都直接取官方结果，不另行计算。
 
 ## 安装
 
-推荐使用 conda 创建 Python 3.10 环境：
-
 ```bash
-conda create -n autovbench python=3.10 -y
-conda activate autovbench
 pip install -e .
 ```
 
-官方 benchmark 客户端由用户在对应环境中安装。例如：
-
-```bash
-# vLLM benchmark 环境
-pip install 'vllm[bench]==0.18.1'
-
-# SGLang benchmark 环境
-pip install 'sglang==0.5.10'
-```
-
-如果客户端不在当前环境，可在配置中填写其绝对路径：
+vLLM、SGLang 客户端另行安装。不在当前环境时，把可执行文件写进配置：
 
 ```yaml
 vllm_executable: /opt/venvs/vllm/bin/vllm
 sglang_python: /opt/venvs/sglang/bin/python
 ```
 
-## 配置
-
-复制并修改示例：
-
-```bash
-cp config.example.yaml config.yaml
-```
-
-主要配置：
-
-```yaml
-backend: vllm
-base_url: http://127.0.0.1:8000
-model: Qwen/Qwen3-8B
-served_model_name: null
-tokenizer: Qwen/Qwen3-8B
-
-vllm_executable: vllm
-sglang_python: python
-
-num_prompts: 100
-concurrency: [1, 4, 8]
-input_output:
-  - input_len: 512
-    output_len: 512
-  - input_len: 1024
-    output_len: 1024
-
-seed: 1
-request_rate: null
-ignore_eos: true
-keep_raw_results: false
-extra_args: []
-```
-
-- `backend`：`vllm` 或 `sglang`
-- `base_url`：已启动服务的根地址
-- `model`：官方 benchmark 用于加载 tokenizer/标识结果的模型名或路径
-- `served_model_name`：API 暴露名称与 `model` 不同时填写
-- `request_rate: null`：使用官方默认值，一次提交所有请求
-- `keep_raw_results`：保留官方 JSON/JSONL 到 `<输出名>_raw/`
-- `extra_args`：原样追加到官方命令，用于传递框架支持的其他参数
+不限制客户端必须是 vLLM 0.18.x 或 SGLang 0.5.x。命令找不到、进程非 0 退出，或官方结果文件解析失败时，该组算失败。查到的版本写在 CSV 的 `client_version`。
 
 ## 运行
 
 ```bash
+cp config.example.yaml config.yaml
 autovbench run -c config.yaml -o results.csv
 ```
 
-每个 `concurrency × input_output` 组合产生一行。每完成一组，CSV 都会原子更新；
-后续 workload 失败不会丢失此前结果。只要有 workload 失败，命令最终返回非零退出码，
-失败原因来自官方 benchmark 的标准错误。
+命令行会覆盖配置里的同名项。必填项齐了也可以不带 `-c`。未写 `--num-prompts` 时默认 1000。
 
-## CSV 字段
+```bash
+autovbench run -o results.csv \
+  --backend vllm \
+  --base-url http://127.0.0.1:8000 \
+  --model Qwen/Qwen3-8B \
+  --concurrency 1,4,8 \
+  --input-output 512:512,4096:1024
+```
 
-CSV 以 vLLM 0.18.1 官方 `--save-result` 的顶层聚合字段为基准，主要包括：
+还可覆盖：`--tokenizer`、`--served-model-name`、`--num-prompts`、`--seed`、`--request-rate`、`--ignore-eos` / `--no-ignore-eos`、`--keep-raw-results` / `--no-keep-raw-results`、`--vllm-executable`、`--sglang-python`、`--official-backend`、`--dataset-name`、`--random-range-ratio`、`--extra-args`。
 
-- 运行参数：`date`、`backend`、`model_id`、`tokenizer_id`、`num_prompts`、
-  `request_rate`、`max_concurrency`
-- workload：`random_input_len`、`random_output_len`
-- 总量与吞吐：`completed`、`failed`、`total_input_tokens`、
-  `total_output_tokens`、`request_throughput`、`output_throughput`、
-  `total_token_throughput`
-- 延迟：TTFT、TPOT、ITL、E2EL 的 mean、median、std、P99，单位为毫秒
-- 追溯信息：`client_version`、`autovbench_version`
+`--extra-args` 放在命令最后，后面的参数会原样追加给官方命令，例如 `--extra-args --foo 1`。
 
-SGLang 字段映射：
+## 默认矩阵
 
-- `total_throughput` → `total_token_throughput`
-- `*_e2e_latency_ms` → `*_e2el_ms`
-- `failed` → `num_prompts - completed`
-- vLLM 独有且无可靠同义值的字段留空
+- 并发：1、4、8、16、32、64、128
+- 长度：512/512、4096/1024、16384/1024
 
-为保证 CSV 是一行一个 workload，默认不启用 vLLM `--save-detailed` 或 SGLang
-`--output-details`，请求级数组、生成文本和错误列表不写入 CSV。
+探索时可以缩小。例如只跑并发数=1：`--concurrency 1 --input-output 512:512`。
+
+默认保留官方原始 JSON/JSONL，以及每组的标准输出和标准错误，目录为 `<结果名>_raw/`。文件名与内部 workload 编号一致，例如 `results_raw/c1-in512-out512.stdout`。
+
+## 官方命令
+
+- vLLM：`vllm bench serve`。默认 `--dataset-name random`、`--random-range-ratio 0`、`--backend vllm`。
+- SGLang：`<sglang_python> -m sglang.bench_serving`。默认 `--dataset-name random-ids`、`--random-range-ratio 1`、`--backend sglang-oai`。
+
+`sglang-oai` 表示走 OpenAI 兼容接口。个别版本名字不同时，用 `official_backend` 或 `--official-backend` 改。
+
+默认不传 `--save-detailed` 和 `--output-details`。
+
+## CSV
+
+一行一个 workload。每组写完就原子更新整张表。有任何一组失败，退出码为非 0，已经写上的行还在。
+
+列是 vLLM `bench serve --save-result` 的聚合字段，并记录实际客户端版本 `client_version`。SGLang 只映射到这些列，例如 `total_throughput` 填到 `total_token_throughput`，`*_e2e_latency_ms` 填到 `*_e2el_ms`。SGLang 多出来的字段不写。对不上的列留空，不自己补数。
 
 ## 测试
-
-测试不需要 GPU 或在线模型服务：
 
 ```bash
 pip install -e '.[test]'
 pytest
 ```
-
-## 官方参考
-
-- [vLLM 0.18.1 bench serve](https://docs.vllm.ai/en/v0.18.1/cli/bench/serve/)
-- [SGLang serving benchmark](https://docs.sglang.io/docs/developer_guide/bench_serving)

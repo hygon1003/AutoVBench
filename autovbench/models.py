@@ -32,8 +32,11 @@ class BenchmarkConfig:
     ignore_eos: bool = True
     executable: str = "vllm"
     python_executable: str = "python"
-    keep_raw_results: bool = False
+    keep_raw_results: bool = True
     extra_args: tuple[str, ...] = field(default_factory=tuple)
+    official_backend: str | None = None
+    dataset_name: str | None = None
+    random_range_ratio: float | None = None
 
     def workloads(self) -> tuple[Workload, ...]:
         return tuple(
@@ -41,6 +44,21 @@ class BenchmarkConfig:
             for concurrency in self.concurrency
             for input_len, output_len in self.input_output
         )
+
+    def resolved_official_backend(self) -> str:
+        if self.official_backend:
+            return self.official_backend
+        return "vllm" if self.backend == "vllm" else "sglang-oai"
+
+    def resolved_dataset_name(self) -> str:
+        if self.dataset_name:
+            return self.dataset_name
+        return "random" if self.backend == "vllm" else "random-ids"
+
+    def resolved_random_range_ratio(self) -> float:
+        if self.random_range_ratio is not None:
+            return self.random_range_ratio
+        return 0.0 if self.backend == "vllm" else 1.0
 
 
 @dataclass(frozen=True)

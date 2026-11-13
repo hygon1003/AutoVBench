@@ -37,16 +37,37 @@ def test_maps_sglang_to_vllm_schema() -> None:
         "mean_e2e_latency_ms": 20.0,
         "p99_e2e_latency_ms": 30.0,
         "mean_ttft_ms": 5.0,
+        "accept_length": 2.5,
+        "input_throughput": 9.0,
+        "concurrency": 1.5,
+        "server_info": {"version": "ignored"},
     }
 
-    row = map_result(raw, config("sglang"), Workload(2, 32, 16), "0.5.10")
+    row = map_result(raw, config("sglang"), Workload(2, 32, 16), "0.4.2")
 
     assert tuple(row) == CSV_FIELDS
-    assert row["failed"] == 2
+    assert "accept_length" not in row
+    assert "input_throughput" not in row
+    assert row["failed"] == ""
+    assert row["date"] == ""
+    assert row["request_goodput"] == ""
     assert row["total_token_throughput"] == 192.0
     assert row["mean_e2el_ms"] == 20.0
     assert row["p99_e2el_ms"] == 30.0
-    assert row["request_goodput"] == ""
+    assert row["mean_ttft_ms"] == 5.0
+    assert row["client_version"] == "0.4.2"
+    assert row["max_output_tokens_per_s"] == ""
+
+
+def test_sglang_failed_is_copied_when_official_file_has_it() -> None:
+    row = map_result(
+        {"completed": 8, "failed": 1},
+        config("sglang"),
+        Workload(2, 32, 16),
+        "0.5.10",
+    )
+
+    assert row["failed"] == 1
 
 
 def test_vllm_values_are_not_recomputed() -> None:
@@ -59,12 +80,13 @@ def test_vllm_values_are_not_recomputed() -> None:
         "p99_ttft_ms": 12.25,
     }
 
-    row = map_result(raw, config("vllm"), Workload(2, 32, 16), "0.18.1")
+    row = map_result(raw, config("vllm"), Workload(2, 32, 16), "0.19.0")
 
     assert row["completed"] == 9
     assert row["failed"] == 1
     assert row["request_throughput"] == 7.5
     assert row["p99_ttft_ms"] == 12.25
+    assert row["client_version"] == "0.19.0"
 
 
 def test_csv_has_stable_header_and_rows(tmp_path: Path) -> None:
