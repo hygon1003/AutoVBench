@@ -50,159 +50,56 @@ autovbench run -c config.yaml -o results.csv
 
 命令行覆盖配置里的同名项。`config.example.yaml` 的矩阵是并发 `1,4,8,16,32,64,128`，长度 `512:512,4096:1024,16384:1024`。
 
-### -o / --output
+完整命令示例见「运行」，下面不再一参一例。
+
+### 开跑必看
+
+| 参数 | 默认/取值 | 说明 |
+| --- | --- | --- |
+| `-o` / `--output` | 必填，须以 `.csv` 结尾 | 结果 CSV。每组结束后整表原子更新 |
+| `--backend` | `vllm` 或 `sglang` | 决定调用哪家官方客户端 |
+| `--base-url` | 无 | 已启动服务的地址 |
+| `--model` | 无 | 传给官方客户端的模型名或权重路径。绝对路径在 CSV「模型名称」里取最后一级 |
+| `--concurrency` | 无，逗号分隔 | 每个并发再配上每一对输入输出长度，各跑一组 |
+| `--input-output` | 无，逗号分隔的 `input:output` | 例如 `512:512,4096:1024` |
+| `--num-prompts` | 不写则为 `2 ×` 该组并发 | 每组计入 CSV 的请求数。预热不计入 |
+
+不写 `--num-prompts`、配置里也没有 `num_prompts` 时，该组计入成绩的请求数 = `2 ×` 该组并发：并发 1 → 2，4 → 8，128 → 256。不是用第一组的并发去套整张表。旧默认 1000 已取消。写了 `N`，或配置 `num_prompts: N`：每一组都用同一个 `N`。
+
+默认另有 10 条预热，默认保留 raw 目录。
+
+### 常用补项
+
+| 参数 | 默认/取值 | 说明 |
+| --- | --- | --- |
+| `-c` / `--config` | 无 | YAML 路径。命令行同名参数覆盖文件 |
+| `--tokenizer` | 不写则用 `--model` |  |
+| `--served-model-name` | 不写 | API 上的模型名与 `--model` 不同时再写 |
+| `--warmup-requests` | 默认 10；`0` 关闭 | 额外预热，不写入 CSV |
+| `--vllm-executable` | 默认 `vllm` | 不在 PATH 时指定 |
+| `--sglang-python` | 默认 `python` | 用来执行 `python -m sglang.bench_serving` |
+| `--keep-raw-results` / `--no-keep-raw-results` | 默认保留 | 目录 `<结果名>_raw/`，见下方说明 |
+
+`--warmup-requests`：预热不计入 CSV。不写 `--num-prompts` 且并发为 1 时，是 10 条预热 + 2 条计入成绩。vLLM 传 `--num-warmups`，SGLang 传 `--warmup-requests`。
+
+`--keep-raw-results`：目录例如 `results_raw/c1-in512-out512.json`、`.stdout`、`.stderr`。
+
+### 进阶
+
+| 参数 | 默认/取值 | 说明 |
+| --- | --- | --- |
+| `--seed` | 默认 1 | 传给官方 `--seed` |
+| `--request-rate` | 不写则不传该参数 | 不写时，官方一次提交全部请求 |
+| `--ignore-eos` / `--no-ignore-eos` | 默认开启 | 见下方说明 |
+| `--official-backend` | 不写时 vLLM 用 `vllm`，SGLang 用 `sglang-oai` | 传给官方 `--backend` |
+| `--dataset-name` | 不写时 vLLM 用 `random`，SGLang 用 `random-ids` |  |
+| `--random-range-ratio` | 不写时 vLLM 用 `0`，SGLang 用 `1` |  |
+| `--extra-args` | 无 | 必须放在命令最后，后面的参数原样追加给官方命令 |
+
+`--ignore-eos`：vLLM 传 `--ignore-eos`。SGLang 只在关闭时传 `--disable-ignore-eos`。
 
 ```bash
-# 结果 CSV，必填，须以 .csv 结尾。每组结束后整表原子更新。
-autovbench run -o results.csv --backend vllm --base-url http://127.0.0.1:8000 --model Qwen/Qwen3-8B --concurrency 1 --input-output 512:512
-```
-
-### -c / --config
-
-```bash
-# YAML 路径。命令行同名参数覆盖文件。
-autovbench run -c config.yaml -o results.csv
-```
-
-### --backend
-
-```bash
-# vllm 或 sglang。决定调用哪家官方客户端。
---backend sglang
-```
-
-### --base-url
-
-```bash
-# 已启动服务的地址。
---base-url http://127.0.0.1:8000
-```
-
-### --model
-
-```bash
-# 传给官方客户端的模型名或权重路径。绝对路径在 CSV「模型名称」里取最后一级。
---model Qwen/Qwen3-8B
---model /models/Qwen3.8-27B-Channel-INT8-w8a8
-```
-
-### --tokenizer
-
-```bash
-# 不写则用 --model。
---tokenizer Qwen/Qwen3-8B
-```
-
-### --served-model-name
-
-```bash
-# API 上的模型名与 --model 不同时再写。
---served-model-name qwen
-```
-
-### --concurrency
-
-```bash
-# 逗号分隔。每个并发再配上每一对输入输出长度，各跑一组。
---concurrency 1,4,8
-```
-
-### --input-output
-
-```bash
-# 逗号分隔的 input:output。
---input-output 512:512,4096:1024
-```
-
-### --num-prompts
-
-```bash
-# 每组计入 CSV 的请求数。预热不计入。
-# 命令行和配置都不写：该组 = 2 × 该组并发。并发 1 → 2，4 → 8，128 → 256。
-# 不是用第一组的并发去套整张表。旧默认 1000 已取消。
-# 写了 N，或配置 num_prompts: N：每一组都用同一个 N。
---num-prompts 32
-```
-
-### --warmup-requests
-
-```bash
-# 默认 10。额外预热，不写入 CSV。0 关闭。
-# 不写 --num-prompts 且并发为 1：10 条预热 + 2 条计入成绩。
-# vLLM 传 --num-warmups，SGLang 传 --warmup-requests。
---warmup-requests 0
---warmup-requests 10
-```
-
-### --seed
-
-```bash
-# 默认 1。传给官方 --seed。
---seed 9
-```
-
-### --request-rate
-
-```bash
-# 不写：不传该参数，官方一次提交全部请求。
---request-rate 1.5
-```
-
-### --ignore-eos
-
-```bash
-# 默认开启。vLLM 传 --ignore-eos。SGLang 只在关闭时传 --disable-ignore-eos。
---ignore-eos
---no-ignore-eos
-```
-
-### --keep-raw-results
-
-```bash
-# 默认保留。目录 <结果名>_raw/，例如 results_raw/c1-in512-out512.json、.stdout、.stderr。
---keep-raw-results
---no-keep-raw-results
-```
-
-### --vllm-executable
-
-```bash
-# 默认 vllm。
---vllm-executable /opt/venvs/vllm/bin/vllm
-```
-
-### --sglang-python
-
-```bash
-# 默认 python。用来执行 python -m sglang.bench_serving。
---sglang-python /opt/venvs/sglang/bin/python
-```
-
-### --official-backend
-
-```bash
-# 传给官方 --backend。不写时 vLLM 用 vllm，SGLang 用 sglang-oai。
---official-backend openai
-```
-
-### --dataset-name
-
-```bash
-# 不写时 vLLM 用 random，SGLang 用 random-ids。
---dataset-name random
-```
-
-### --random-range-ratio
-
-```bash
-# 不写时 vLLM 用 0，SGLang 用 1。
---random-range-ratio 0
-```
-
-### --extra-args
-
-```bash
-# 必须放在命令最后，后面的参数原样追加给官方命令。
+# --extra-args 必须放在命令最后
 autovbench run -o results.csv --backend vllm --base-url http://127.0.0.1:8000 --model Qwen/Qwen3-8B --concurrency 1 --input-output 512:512 --extra-args --foo 1
 ```
 
