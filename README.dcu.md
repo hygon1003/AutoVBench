@@ -127,8 +127,7 @@ autovbench run -o /results/explore.csv \
 ## 查看结果
 
 ```bash
-# CSV：容器 /results/explore.csv，宿主机 results/explore.csv。
+# CSV：容器 /results/explore.csv，宿主机 results/explore.csv。表头见 README「CSV」。
 # 原始结果：容器 /results/explore_raw/。并发数=1 的文件名为 c1-in512-out512.jsonl、.stdout、.stderr。
-# raw 若无 failed 键，CSV 的 failed 列为空，不要写成 0。
 ls /results/explore.csv /results/explore_raw
 ```

@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from autovbench.cli import main
+from autovbench.result_mapper import REPORT_FIELDS
 
 
 def write_fake_vllm(path: Path, log_path: Path) -> None:
@@ -61,11 +62,13 @@ if len(sys.argv) > 1 and sys.argv[1] == "-c":
     raise SystemExit(0)
 
 args = sys.argv[1:]
+concurrency = args[args.index("--max-concurrency") + 1]
 output = pathlib.Path(args[args.index("--output-file") + 1])
 output.parent.mkdir(parents=True, exist_ok=True)
 output.write_text(json.dumps({{
     "completed": 2,
     "total_throughput": 10,
+    "request_throughput": float(concurrency),
     "mean_e2e_latency_ms": 3,
     "accept_length": 1.2,
 }}) + "\\n", encoding="utf-8")
@@ -109,9 +112,15 @@ input_output:
 
     with output.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    assert [row["max_concurrency"] for row in rows] == ["1"]
-    assert rows[0]["request_throughput"] == "1.0"
-    assert rows[0]["client_version"] == "0.19.0"
+    assert tuple(rows[0]) == REPORT_FIELDS
+    assert rows[0]["num_prompts"] == "2"
+    assert rows[0]["input_len"] == "16"
+    assert rows[0]["output_len"] == "8"
+    assert rows[0]["Request Throughput (req/s)"] == "1.00"
+    assert rows[0]["推理引擎版本"] == "0.19.0"
+    assert rows[0]["模型名称"] == "model"
+    assert rows[0]["Mean TPOT (ms)"] == ""
+    assert rows[0]["单并发Decode吞吐"] == ""
     raw_dir = tmp_path / "result_raw"
     assert (raw_dir / "c1-in16-out8.json").is_file()
     assert (raw_dir / "c1-in16-out8.stdout").read_text(encoding="utf-8") == "bench-ok\n"
@@ -188,9 +197,11 @@ input_output:
 
     with output.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    assert [row["max_concurrency"] for row in rows] == ["8"]
-    assert rows[0]["model_id"] == "from-cli"
-    assert rows[0]["random_input_len"] == "32"
+    assert len(rows) == 1
+    assert rows[0]["模型名称"] == "from-cli"
+    assert rows[0]["input_len"] == "32"
+    assert rows[0]["output_len"] == "16"
+    assert rows[0]["num_prompts"] == "3"
     bench = next(item for item in read_invocations(log_path) if "bench" in item)
     assert bench[bench.index("--model") + 1] == "from-cli"
     assert bench[bench.index("--tokenizer") + 1] == "cli-tokenizer"
@@ -238,12 +249,13 @@ def test_cli_only_sglang_defaults(tmp_path: Path) -> None:
 
     with output.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    assert [row["max_concurrency"] for row in rows] == ["1", "4"]
-    assert {row["client_version"] for row in rows} == {"0.4.2"}
-    assert rows[0]["total_token_throughput"] == "10"
-    assert rows[0]["mean_e2el_ms"] == "3"
-    assert rows[0]["failed"] == ""
+    assert [row["Request Throughput (req/s)"] for row in rows] == ["1.00", "4.00"]
+    assert {row["推理引擎版本"] for row in rows} == {"0.4.2"}
+    assert rows[0]["Total Token throughput (tok/s)"] == "10.00"
+    assert rows[0]["单并发Decode吞吐"] == ""
     assert "accept_length" not in rows[0]
+    assert "failed" not in rows[0]
+    assert "mean_e2el_ms" not in rows[0]
     bench = next(item for item in read_invocations(log_path) if "sglang.bench_serving" in item)
     assert bench[0] == "-m"
     assert bench[bench.index("--backend") + 1] == "sglang-oai"
@@ -286,7 +298,9 @@ def test_failed_workload_keeps_previous_row_and_stderr(tmp_path: Path) -> None:
 
     with output.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    assert [row["max_concurrency"] for row in rows] == ["1"]
+    assert len(rows) == 1
+    assert rows[0]["Request Throughput (req/s)"] == "1.00"
+    assert rows[0]["num_prompts"] == "2"
     assert (tmp_path / "result_raw" / "c4-in16-out8.stderr").read_text(encoding="utf-8") == "boom\n"
 
 

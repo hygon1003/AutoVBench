@@ -4,7 +4,7 @@ AutoVBench 用来给已经启动的大模型服务做批量压测。它只调用
 
 用它，就不用自己写发压和打分，也不用一条条手敲官方命令。不用它，就要反复执行 `vllm bench serve` 或 `python -m sglang.bench_serving`，或者另写客户端。
 
-本工具不启动模型服务。吞吐和延迟都直接取官方结果，不另行计算。
+本工具不启动模型服务。官方吞吐和延迟取自结果文件，浮点保留两位小数。单并发Decode吞吐 = 1000 / Mean TPOT (ms)。
 
 海光 DCU 上从拉镜像到看结果的示例见 [README.dcu.md](README.dcu.md)。
 
@@ -21,7 +21,7 @@ vllm_executable: /opt/venvs/vllm/bin/vllm
 sglang_python: /opt/venvs/sglang/bin/python
 ```
 
-不限制客户端必须是 vLLM 0.18.x 或 SGLang 0.5.x。命令找不到、进程非 0 退出，或官方结果文件解析失败时，该组算失败。查到的版本写在 CSV 的 `client_version`。
+不限制客户端必须是 vLLM 0.18.x 或 SGLang 0.5.x。命令找不到、进程非 0 退出，或官方结果文件解析失败时，该组算失败。查到的版本写在 CSV 的「推理引擎版本」。
 
 ## 运行
 
@@ -69,7 +69,16 @@ autovbench run -o results.csv \
 
 一行一个 workload。每组写完就原子更新整张表。有任何一组失败，退出码为非 0，已经写上的行还在。
 
-列是 vLLM `bench serve --save-result` 的聚合字段，并记录实际客户端版本 `client_version`。SGLang 只映射到这些列，例如 `total_throughput` 填到 `total_token_throughput`，`*_e2e_latency_ms` 填到 `*_e2el_ms`。SGLang 多出来的字段不写。对不上的列留空，不自己补数。
+```text
+模型名称,推理引擎版本,num_prompts,input_len,output_len,Benchmark Duration (s),Total Input Tokens,Total Generated Tokens,Request Throughput (req/s),Output Token Throughput (tok/s),Total Token throughput (tok/s),Mean TTFT (ms),Median TTFT (ms),P99 TTFT (ms),Mean TPOT (ms),Median TPOT (ms),P99 TPOT (ms),Mean ITL (ms),Median ITL (ms),P99 ITL (ms),单并发Decode吞吐
+```
+
+```bash
+# 浮点两位小数，计数保持整数。官方结果没有的指标留空。
+# 单并发Decode吞吐 = 1000 / 未四舍五入的 Mean TPOT。Mean TPOT 为 0、非有限或缺失时该列留空。
+# 模型名称：绝对路径取最后一级，其余保持原样。推理引擎版本：客户端版本。
+# UTF-8 BOM。SGLang 的 total_throughput 写入 Total Token throughput (tok/s)。
+```
 
 ## 测试
 
