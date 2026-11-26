@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from .result_mapper import CSV_FIELDS
+from .result_mapper import REPORT_FIELDS
 
 
 def write_csv_atomic(path: Path, rows: Iterable[dict[str, Any]]) -> None:
@@ -26,7 +26,7 @@ def write_csv_atomic(path: Path, rows: Iterable[dict[str, Any]]) -> None:
             delete=False,
         ) as handle:
             temp_path = Path(handle.name)
-            writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS, extrasaction="ignore")
+            writer = csv.DictWriter(handle, fieldnames=REPORT_FIELDS, extrasaction="ignore")
             writer.writeheader()
             writer.writerows(rows)
             handle.flush()

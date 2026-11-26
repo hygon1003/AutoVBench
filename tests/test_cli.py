@@ -4,7 +4,10 @@ import stat
 import sys
 from pathlib import Path
 
+import pytest
+
 from autovbench.cli import main
+from autovbench.result_mapper import REPORT_FIELDS
 
 
 def write_fake_vllm(path: Path, log_path: Path) -> None:
@@ -61,11 +64,13 @@ if len(sys.argv) > 1 and sys.argv[1] == "-c":
     raise SystemExit(0)
 
 args = sys.argv[1:]
+concurrency = args[args.index("--max-concurrency") + 1]
 output = pathlib.Path(args[args.index("--output-file") + 1])
 output.parent.mkdir(parents=True, exist_ok=True)
 output.write_text(json.dumps({{
     "completed": 2,
     "total_throughput": 10,
+    "request_throughput": float(concurrency),
     "mean_e2e_latency_ms": 3,
     "accept_length": 1.2,
 }}) + "\\n", encoding="utf-8")
@@ -109,9 +114,15 @@ input_output:
 
     with output.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    assert [row["max_concurrency"] for row in rows] == ["1"]
-    assert rows[0]["request_throughput"] == "1.0"
-    assert rows[0]["client_version"] == "0.19.0"
+    assert tuple(rows[0]) == REPORT_FIELDS
+    assert rows[0]["num_prompts"] == "2"
+    assert rows[0]["input_len"] == "16"
+    assert rows[0]["output_len"] == "8"
+    assert rows[0]["Request Throughput (req/s)"] == "1.00"
+    assert rows[0]["推理引擎版本"] == "0.19.0"
+    assert rows[0]["模型名称"] == "model"
+    assert rows[0]["Mean TPOT (ms)"] == ""
+    assert rows[0]["单并发Decode吞吐"] == ""
     raw_dir = tmp_path / "result_raw"
     assert (raw_dir / "c1-in16-out8.json").is_file()
     assert (raw_dir / "c1-in16-out8.stdout").read_text(encoding="utf-8") == "bench-ok\n"
@@ -188,9 +199,11 @@ input_output:
 
     with output.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    assert [row["max_concurrency"] for row in rows] == ["8"]
-    assert rows[0]["model_id"] == "from-cli"
-    assert rows[0]["random_input_len"] == "32"
+    assert len(rows) == 1
+    assert rows[0]["模型名称"] == "from-cli"
+    assert rows[0]["input_len"] == "32"
+    assert rows[0]["output_len"] == "16"
+    assert rows[0]["num_prompts"] == "3"
     bench = next(item for item in read_invocations(log_path) if "bench" in item)
     assert bench[bench.index("--model") + 1] == "from-cli"
     assert bench[bench.index("--tokenizer") + 1] == "cli-tokenizer"
@@ -238,12 +251,13 @@ def test_cli_only_sglang_defaults(tmp_path: Path) -> None:
 
     with output.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    assert [row["max_concurrency"] for row in rows] == ["1", "4"]
-    assert {row["client_version"] for row in rows} == {"0.4.2"}
-    assert rows[0]["total_token_throughput"] == "10"
-    assert rows[0]["mean_e2el_ms"] == "3"
-    assert rows[0]["failed"] == ""
+    assert [row["Request Throughput (req/s)"] for row in rows] == ["1.00", "4.00"]
+    assert {row["推理引擎版本"] for row in rows} == {"0.4.2"}
+    assert rows[0]["Total Token throughput (tok/s)"] == "10.00"
+    assert rows[0]["单并发Decode吞吐"] == ""
     assert "accept_length" not in rows[0]
+    assert "failed" not in rows[0]
+    assert "mean_e2el_ms" not in rows[0]
     bench = next(item for item in read_invocations(log_path) if "sglang.bench_serving" in item)
     assert bench[0] == "-m"
     assert bench[bench.index("--backend") + 1] == "sglang-oai"
@@ -286,7 +300,9 @@ def test_failed_workload_keeps_previous_row_and_stderr(tmp_path: Path) -> None:
 
     with output.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    assert [row["max_concurrency"] for row in rows] == ["1"]
+    assert len(rows) == 1
+    assert rows[0]["Request Throughput (req/s)"] == "1.00"
+    assert rows[0]["num_prompts"] == "2"
     assert (tmp_path / "result_raw" / "c4-in16-out8.stderr").read_text(encoding="utf-8") == "boom\n"
 
 
@@ -327,3 +343,94 @@ def test_cli_can_skip_raw_results(tmp_path: Path) -> None:
 
 def test_cli_requires_backend(tmp_path: Path) -> None:
     assert main(["run", "-o", str(tmp_path / "result.csv")]) == 2
+
+
+def test_omitted_num_prompts_prints_twice_concurrency(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake_python = tmp_path / "python"
+    log_path = tmp_path / "argv.jsonl"
+    write_fake_sglang(fake_python, log_path)
+    output = tmp_path / "result.csv"
+
+    assert (
+        main(
+            [
+                "run",
+                "-o",
+                str(output),
+                "--backend",
+                "sglang",
+                "--base-url",
+                "http://127.0.0.1:30000",
+                "--model",
+                "model",
+                "--concurrency",
+                "1,4",
+                "--input-output",
+                "16:8",
+                "--sglang-python",
+                str(fake_python),
+            ]
+        )
+        == 0
+    )
+
+    benches = [
+        item
+        for item in read_invocations(log_path)
+        if "sglang.bench_serving" in item
+    ]
+    assert [item[item.index("--num-prompts") + 1] for item in benches] == ["2", "8"]
+    assert {item[item.index("--warmup-requests") + 1] for item in benches} == {"10"}
+    with output.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [row["num_prompts"] for row in rows] == ["2", "8"]
+    printed = capsys.readouterr().out
+    first = "concurrency=1 num_prompts=2 warmup=10; CSV updates after this group finishes"
+    second = "concurrency=4 num_prompts=8 warmup=10; CSV updates after this group finishes"
+    assert first in printed
+    assert second in printed
+    assert printed.index(first) < printed.index(second)
+
+
+def test_explicit_num_prompts_is_shared_across_workloads(tmp_path: Path) -> None:
+    fake_python = tmp_path / "python"
+    log_path = tmp_path / "argv.jsonl"
+    write_fake_sglang(fake_python, log_path)
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"""
+backend: sglang
+base_url: http://127.0.0.1:30000
+model: model
+sglang_python: {fake_python}
+num_prompts: 7
+concurrency: [1, 128]
+input_output:
+  - input_len: 16
+    output_len: 8
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["run", "-c", str(config), "-o", str(tmp_path / "result.csv"), "--num-prompts", "5"]) == 0
+
+    benches = [
+        item
+        for item in read_invocations(log_path)
+        if "sglang.bench_serving" in item
+    ]
+    assert [item[item.index("--num-prompts") + 1] for item in benches] == ["5", "5"]
+
+
+def test_help_documents_prompt_and_warmup_defaults(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as caught:
+        main(["run", "--help"])
+
+    assert caught.value.code == 0
+    text = " ".join(capsys.readouterr().out.split())
+    assert "2 x that workload's concurrency" in text
+    assert "old default was 1000" in text
+    assert "10 warmups + 2 measured prompts" in text

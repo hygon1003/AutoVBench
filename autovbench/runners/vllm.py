@@ -44,7 +44,7 @@ class VLLMRunner:
             "--random-range-ratio",
             format_cli_number(self.config.resolved_random_range_ratio()),
             "--num-prompts",
-            str(self.config.num_prompts),
+            str(self.config.resolved_num_prompts(workload)),
             "--max-concurrency",
             str(workload.concurrency),
             "--seed",

@@ -120,7 +120,8 @@ def build_config(data: dict[str, Any]) -> BenchmarkConfig:
             )
         )
 
-    num_prompts = _positive_int(data.get("num_prompts", 1000), "num_prompts")
+    raw_prompts = data.get("num_prompts")
+    num_prompts = None if raw_prompts is None else _positive_int(raw_prompts, "num_prompts")
     warmup_requests = data.get("warmup_requests", 10)
     if (
         isinstance(warmup_requests, bool)

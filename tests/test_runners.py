@@ -35,6 +35,7 @@ def test_vllm_command_uses_official_cli(tmp_path: Path) -> None:
     assert command[command.index("--backend") + 1] == "vllm"
     assert command[command.index("--dataset-name") + 1] == "random"
     assert command[command.index("--random-range-ratio") + 1] == "0"
+    assert command[command.index("--num-prompts") + 1] == "20"
     assert command[command.index("--num-warmups") + 1] == "10"
     assert "--save-result" in command
     assert "--save-detailed" not in command
@@ -84,6 +85,27 @@ def test_sglang_official_flags_can_be_overridden(tmp_path: Path) -> None:
     assert command[command.index("--backend") + 1] == "sglang"
     assert command[command.index("--dataset-name") + 1] == "random"
     assert command[command.index("--random-range-ratio") + 1] == "0"
+
+
+def test_num_prompts_follows_each_workload_when_unset(tmp_path: Path) -> None:
+    unset = config("vllm", num_prompts=None)
+    one = VLLMRunner(unset).build_command(Workload(1, 128, 64), tmp_path, "a.json", "0.19.1")
+    large = VLLMRunner(unset).build_command(
+        Workload(128, 128, 64), tmp_path, "b.json", "0.19.1"
+    )
+    fixed = VLLMRunner(config("vllm", num_prompts=5)).build_command(
+        Workload(128, 128, 64), tmp_path, "c.json", "0.19.1"
+    )
+    sglang_one = SGLangRunner(config("sglang", num_prompts=None)).build_command(
+        Workload(4, 128, 64), tmp_path / "d.jsonl"
+    )
+
+    assert one[one.index("--num-prompts") + 1] == "2"
+    assert large[large.index("--num-prompts") + 1] == "256"
+    assert fixed[fixed.index("--num-prompts") + 1] == "5"
+    assert sglang_one[sglang_one.index("--num-prompts") + 1] == "8"
+    assert one[one.index("--num-warmups") + 1] == "10"
+    assert sglang_one[sglang_one.index("--warmup-requests") + 1] == "10"
 
 
 @pytest.mark.parametrize("warmup", [0, 7])

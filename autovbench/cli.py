@@ -30,39 +30,102 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     run_parser = subparsers.add_parser("run", help="run the workload matrix")
-    run_parser.add_argument("-c", "--config", help="YAML config path")
-    run_parser.add_argument("-o", "--output", required=True, help="output CSV path")
-    run_parser.add_argument("--backend", choices=("vllm", "sglang"))
-    run_parser.add_argument("--base-url")
-    run_parser.add_argument("--model")
-    run_parser.add_argument("--tokenizer")
-    run_parser.add_argument("--served-model-name")
+    run_parser.add_argument(
+        "-c",
+        "--config",
+        help="YAML config path; a CLI flag overrides the same key",
+    )
+    run_parser.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        help="result CSV path (must end with .csv); rewritten after each workload",
+    )
+    run_parser.add_argument(
+        "--backend",
+        choices=("vllm", "sglang"),
+        help="which official client to call: vllm or sglang",
+    )
+    run_parser.add_argument(
+        "--base-url",
+        help="URL of the server that is already running, for example http://127.0.0.1:8000",
+    )
+    run_parser.add_argument(
+        "--model",
+        help="model id or weight path passed to the official client",
+    )
+    run_parser.add_argument(
+        "--tokenizer",
+        help="tokenizer path; omit to use --model",
+    )
+    run_parser.add_argument(
+        "--served-model-name",
+        help="API model name when it differs from --model",
+    )
     run_parser.add_argument(
         "--concurrency",
-        help="comma-separated list, for example 1,4,8,16",
+        help="comma-separated concurrencies, for example 1,4,8. Example file uses 1,4,8,16,32,64,128",
     )
     run_parser.add_argument(
         "--input-output",
-        help="comma-separated input:output pairs, for example 512:512,4096:1024",
+        help="comma-separated input:output lengths, for example 512:512,4096:1024",
     )
-    run_parser.add_argument("--num-prompts", type=int)
+    run_parser.add_argument(
+        "--num-prompts",
+        type=int,
+        help=(
+            "measured prompts for every workload. "
+            "Omit to use 2 x that workload's concurrency "
+            "(concurrency 1 -> 2, 4 -> 8, 128 -> 256; the old default was 1000). "
+            "Warmups are extra and are not in the CSV"
+        ),
+    )
     run_parser.add_argument(
         "--warmup-requests",
         type=int,
-        help="official warmup count; vLLM --num-warmups, SGLang --warmup-requests; 0 disables",
+        help=(
+            "extra warmup requests, not written to the CSV. Default 10. 0 disables. "
+            "vLLM receives --num-warmups, SGLang receives --warmup-requests. "
+            "A concurrency-1 run that omits --num-prompts is 10 warmups + 2 measured prompts"
+        ),
     )
-    run_parser.add_argument("--seed", type=int)
-    run_parser.add_argument("--request-rate", type=float)
-    run_parser.add_argument("--ignore-eos", action=argparse.BooleanOptionalAction)
-    run_parser.add_argument("--keep-raw-results", action=argparse.BooleanOptionalAction)
-    run_parser.add_argument("--vllm-executable")
-    run_parser.add_argument("--sglang-python")
+    run_parser.add_argument("--seed", type=int, help="official --seed. Default 1")
+    run_parser.add_argument(
+        "--request-rate",
+        type=float,
+        help="official --request-rate. Omit to leave the flag unset (send the batch at once)",
+    )
+    run_parser.add_argument(
+        "--ignore-eos",
+        action=argparse.BooleanOptionalAction,
+        help="default on. vLLM gets --ignore-eos; SGLang gets --disable-ignore-eos only when off",
+    )
+    run_parser.add_argument(
+        "--keep-raw-results",
+        action=argparse.BooleanOptionalAction,
+        help="default on. Keep official JSON/JSONL plus stdout and stderr in <output>_raw/",
+    )
+    run_parser.add_argument(
+        "--vllm-executable",
+        help="vLLM CLI path. Default: vllm",
+    )
+    run_parser.add_argument(
+        "--sglang-python",
+        help="Python used for python -m sglang.bench_serving. Default: python",
+    )
     run_parser.add_argument(
         "--official-backend",
-        help="value passed to the official --backend flag",
+        help="value of the official --backend flag. Default: vllm, or sglang-oai for SGLang",
     )
-    run_parser.add_argument("--dataset-name")
-    run_parser.add_argument("--random-range-ratio", type=float)
+    run_parser.add_argument(
+        "--dataset-name",
+        help="official --dataset-name. Default: random for vLLM, random-ids for SGLang",
+    )
+    run_parser.add_argument(
+        "--random-range-ratio",
+        type=float,
+        help="official --random-range-ratio. Default: 0 for vLLM, 1 for SGLang",
+    )
     run_parser.add_argument(
         "--extra-args",
         nargs=argparse.REMAINDER,
@@ -137,9 +200,25 @@ def _run(args: argparse.Namespace) -> int:
     raw_dir = output.parent / f"{output.stem}_raw" if config.keep_raw_results else temporary
     raw_dir.mkdir(parents=True, exist_ok=True)
     try:
-        print(f"Using {config.backend} {client_version}; running {len(workloads)} workload(s).")
+        if config.num_prompts is None:
+            prompt_note = "measured prompts = 2 x each workload's concurrency"
+        else:
+            prompt_note = f"measured prompts = {config.num_prompts} for every workload"
+        print(
+            f"Using {config.backend} {client_version}; running {len(workloads)} workload(s); "
+            f"{prompt_note}; warmup={config.warmup_requests} (not in the CSV).",
+            flush=True,
+        )
         for index, workload in enumerate(workloads, start=1):
-            print(f"[{index}/{len(workloads)}] {workload.name}")
+            prompts = config.resolved_num_prompts(workload)
+            print(
+                f"[{index}/{len(workloads)}] {workload.name} "
+                f"concurrency={workload.concurrency} "
+                f"num_prompts={prompts} "
+                f"warmup={config.warmup_requests}; "
+                f"CSV updates after this group finishes",
+                flush=True,
+            )
             try:
                 command_result = runner.run(workload, raw_dir, client_version)
             except RunnerError as exc:
@@ -155,10 +234,6 @@ def _run(args: argparse.Namespace) -> int:
                     command_result.stdout,
                     command_result.stderr,
                 )
-            if command_result.stdout:
-                print(command_result.stdout, end="")
-            if command_result.stderr:
-                print(command_result.stderr, end="", file=sys.stderr)
             try:
                 raw = load_official_result(command_result.raw_result_path, config.backend)
                 rows.append(map_result(raw, config, workload, client_version))
@@ -169,7 +244,7 @@ def _run(args: argparse.Namespace) -> int:
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
 
-    print(f"Wrote {len(rows)} result row(s) to {output}")
+    print(f"Wrote {len(rows)} result row(s) to {output}", flush=True)
     if failures:
         print(f"{failures} workload(s) failed.", file=sys.stderr)
         return 1
