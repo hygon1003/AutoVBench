@@ -49,13 +49,17 @@ SAMPLE = {
 }
 
 
-def config(backend: str, model: str = "model") -> BenchmarkConfig:
+def config(
+    backend: str,
+    model: str = "model",
+    num_prompts: int | None = 10,
+) -> BenchmarkConfig:
     return BenchmarkConfig(
         backend=backend,
         base_url="http://127.0.0.1:8000",
         model=model,
         tokenizer="tokenizer",
-        num_prompts=10,
+        num_prompts=num_prompts,
         concurrency=(2,),
         input_output=((32, 16),),
     )
@@ -163,6 +167,19 @@ def test_decode_throughput_blank_when_mean_tpot_missing(raw: dict[str, object]) 
     assert row["num_prompts"] == "10"
     assert row["input_len"] == "32"
     assert row["output_len"] == "16"
+
+
+def test_prompt_count_falls_back_to_twice_concurrency() -> None:
+    omitted = map_result({}, config("vllm", num_prompts=None), Workload(4, 32, 16), "0.19.0")
+    explicit = map_result(
+        {"num_prompts": 3},
+        config("vllm", num_prompts=None),
+        Workload(128, 32, 16),
+        "0.19.0",
+    )
+
+    assert omitted["num_prompts"] == "8"
+    assert explicit["num_prompts"] == "3"
 
 
 def test_missing_metrics_stay_blank() -> None:

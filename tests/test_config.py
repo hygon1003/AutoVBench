@@ -4,10 +4,12 @@ import pytest
 
 from autovbench.config import (
     ConfigError,
+    build_config,
     load_config,
     parse_concurrency_text,
     parse_input_output_text,
 )
+from autovbench.models import Workload
 
 
 def write_config(path: Path, extra: str = "") -> Path:
@@ -49,6 +51,9 @@ def test_example_defaults() -> None:
 
     assert config.concurrency == (1, 4, 8, 16, 32, 64, 128)
     assert config.input_output == ((512, 512), (4096, 1024), (16384, 1024))
+    assert config.num_prompts is None
+    assert config.resolved_num_prompts(Workload(1, 512, 512)) == 2
+    assert config.resolved_num_prompts(Workload(128, 512, 512)) == 256
     assert config.warmup_requests == 10
     assert config.keep_raw_results is True
     assert config.resolved_dataset_name() == "random"
@@ -81,6 +86,50 @@ def test_explicit_zero_ratio_is_kept(tmp_path: Path) -> None:
     assert config.resolved_official_backend() == "sglang"
     assert config.resolved_dataset_name() == "random"
     assert config.resolved_random_range_ratio() == 0
+
+
+def _minimum_config(**extra: object) -> dict[str, object]:
+    data: dict[str, object] = {
+        "backend": "vllm",
+        "base_url": "http://127.0.0.1:8000",
+        "model": "model",
+        "concurrency": [1, 4, 128],
+        "input_output": [
+            {"input_len": 512, "output_len": 512},
+            {"input_len": 4096, "output_len": 1024},
+        ],
+    }
+    data.update(extra)
+    return data
+
+
+def test_omitted_num_prompts_is_twice_each_concurrency() -> None:
+    config = build_config(_minimum_config())
+
+    assert config.num_prompts is None
+    assert config.warmup_requests == 10
+    assert [config.resolved_num_prompts(workload) for workload in config.workloads()] == [
+        2,
+        2,
+        8,
+        8,
+        256,
+        256,
+    ]
+
+
+def test_explicit_num_prompts_applies_to_every_workload() -> None:
+    config = build_config(_minimum_config(num_prompts=32))
+
+    assert config.num_prompts == 32
+    assert [config.resolved_num_prompts(workload) for workload in config.workloads()] == [
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+    ]
 
 
 def test_list_text_parsers() -> None:

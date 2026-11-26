@@ -4,6 +4,8 @@ import stat
 import sys
 from pathlib import Path
 
+import pytest
+
 from autovbench.cli import main
 from autovbench.result_mapper import REPORT_FIELDS
 
@@ -341,3 +343,94 @@ def test_cli_can_skip_raw_results(tmp_path: Path) -> None:
 
 def test_cli_requires_backend(tmp_path: Path) -> None:
     assert main(["run", "-o", str(tmp_path / "result.csv")]) == 2
+
+
+def test_omitted_num_prompts_prints_twice_concurrency(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake_python = tmp_path / "python"
+    log_path = tmp_path / "argv.jsonl"
+    write_fake_sglang(fake_python, log_path)
+    output = tmp_path / "result.csv"
+
+    assert (
+        main(
+            [
+                "run",
+                "-o",
+                str(output),
+                "--backend",
+                "sglang",
+                "--base-url",
+                "http://127.0.0.1:30000",
+                "--model",
+                "model",
+                "--concurrency",
+                "1,4",
+                "--input-output",
+                "16:8",
+                "--sglang-python",
+                str(fake_python),
+            ]
+        )
+        == 0
+    )
+
+    benches = [
+        item
+        for item in read_invocations(log_path)
+        if "sglang.bench_serving" in item
+    ]
+    assert [item[item.index("--num-prompts") + 1] for item in benches] == ["2", "8"]
+    assert {item[item.index("--warmup-requests") + 1] for item in benches} == {"10"}
+    with output.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [row["num_prompts"] for row in rows] == ["2", "8"]
+    printed = capsys.readouterr().out
+    first = "concurrency=1 num_prompts=2 warmup=10; CSV updates after this group finishes"
+    second = "concurrency=4 num_prompts=8 warmup=10; CSV updates after this group finishes"
+    assert first in printed
+    assert second in printed
+    assert printed.index(first) < printed.index(second)
+
+
+def test_explicit_num_prompts_is_shared_across_workloads(tmp_path: Path) -> None:
+    fake_python = tmp_path / "python"
+    log_path = tmp_path / "argv.jsonl"
+    write_fake_sglang(fake_python, log_path)
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"""
+backend: sglang
+base_url: http://127.0.0.1:30000
+model: model
+sglang_python: {fake_python}
+num_prompts: 7
+concurrency: [1, 128]
+input_output:
+  - input_len: 16
+    output_len: 8
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["run", "-c", str(config), "-o", str(tmp_path / "result.csv"), "--num-prompts", "5"]) == 0
+
+    benches = [
+        item
+        for item in read_invocations(log_path)
+        if "sglang.bench_serving" in item
+    ]
+    assert [item[item.index("--num-prompts") + 1] for item in benches] == ["5", "5"]
+
+
+def test_help_documents_prompt_and_warmup_defaults(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as caught:
+        main(["run", "--help"])
+
+    assert caught.value.code == 0
+    text = " ".join(capsys.readouterr().out.split())
+    assert "2 x that workload's concurrency" in text
+    assert "old default was 1000" in text
+    assert "10 warmups + 2 measured prompts" in text

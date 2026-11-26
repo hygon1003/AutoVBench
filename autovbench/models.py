@@ -23,7 +23,8 @@ class BenchmarkConfig:
     base_url: str
     model: str
     tokenizer: str | None
-    num_prompts: int
+    # None: each workload uses 2 x its own concurrency. An int applies to every workload.
+    num_prompts: int | None
     concurrency: tuple[int, ...]
     input_output: tuple[tuple[int, int], ...]
     served_model_name: str | None = None
@@ -45,6 +46,11 @@ class BenchmarkConfig:
             for concurrency in self.concurrency
             for input_len, output_len in self.input_output
         )
+
+    def resolved_num_prompts(self, workload: Workload) -> int:
+        if self.num_prompts is not None:
+            return self.num_prompts
+        return 2 * workload.concurrency
 
     def resolved_official_backend(self) -> str:
         if self.official_backend:

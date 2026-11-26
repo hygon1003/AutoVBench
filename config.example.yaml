@@ -1,25 +1,42 @@
 # 压测哪家官方客户端：vllm 或 sglang。服务需事先启动。
 backend: vllm
 
+# 已启动服务的地址。
 base_url: http://127.0.0.1:8000
+
+# 传给官方客户端的模型名或权重路径。
 model: Qwen/Qwen3-8B
-# API 上的模型名与 tokenizer 路径不同时再填。
+
+# API 上的模型名与 model 不同时再填。不填则不传。
 served_model_name: null
+
+# 不填则用 model。
 tokenizer: Qwen/Qwen3-8B
 
+# 官方客户端不在 PATH 时改成绝对路径。默认 vllm、python。
 vllm_executable: vllm
 sglang_python: python
 
-# 官方 --backend。不填时 vLLM 用 vllm，SGLang 用 sglang-oai。
+# 传给官方 --backend。不填时 vLLM 用 vllm，SGLang 用 sglang-oai。
 # official_backend: sglang-oai
+
 # 官方 --dataset-name。不填时 vLLM 用 random，SGLang 用 random-ids。
 # dataset_name: random
+
 # 官方 --random-range-ratio。不填时 vLLM 用 0，SGLang 用 1。
 # random_range_ratio: 0
 
-num_prompts: 100
-# 预热请求数。vLLM 传 --num-warmups，SGLang 传 --warmup-requests。不计入 CSV。0 关闭。
+# 每组计入 CSV 的请求数。预热不计入。
+# 删掉本项：每组 = 2 × 该组并发（并发 1 → 2，4 → 8，128 → 256）。旧默认 1000 已取消。
+# 写成正整数：每一组都用这个数。
+# num_prompts: 32
+
+# 额外预热条数。默认 10。不计入 CSV。0 关闭。
+# vLLM 传 --num-warmups，SGLang 传 --warmup-requests。
+# 不写 num_prompts 且并发为 1：10 条预热 + 2 条计入成绩。
 warmup_requests: 10
+
+# 每个并发配上下面每一对长度，各跑一组。
 concurrency: [1, 4, 8, 16, 32, 64, 128]
 input_output:
   - input_len: 512
@@ -29,10 +46,16 @@ input_output:
   - input_len: 16384
     output_len: 1024
 
+# 官方 --seed。默认 1。
 seed: 1
-# null 表示不传该参数，沿用官方默认（一次提交全部请求）。
+
+# null：不传 --request-rate，官方一次提交全部请求。
 request_rate: null
+
+# 默认 true。vLLM 传 --ignore-eos。SGLang 仅在 false 时传 --disable-ignore-eos。
 ignore_eos: true
+
+# 默认 true。原始 JSON/JSONL、stdout、stderr 写到 <结果名>_raw/。
 keep_raw_results: true
 
 # 原样追加到官方命令末尾。

@@ -121,7 +121,10 @@ def map_result(
     row = {
         "模型名称": model_display_name(model_id),
         "推理引擎版本": version,
-        "num_prompts": _format_count(_number(raw, "num_prompts"), config.num_prompts),
+        "num_prompts": _format_count(
+            _number(raw, "num_prompts"),
+            config.resolved_num_prompts(workload),
+        ),
         "input_len": _format_count(
             _number(raw, "input_len", "random_input_len"),
             workload.input_len,

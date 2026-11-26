@@ -113,7 +113,10 @@ pip install -e . --no-deps --no-build-isolation
 ## 试跑
 
 ```bash
-# 并发数=1 和并发数=4，长度 512/512。把上面的端口一并改掉。
+# 并发 1 和 4，长度 512/512。把上面的端口一并改掉。
+# 不写 --num-prompts：计入 CSV 的是 2 条和 8 条，另各有 10 条预热。旧默认 1000 已取消。
+# 下面仍显式指定每组 32 条计入成绩。预热默认 10，不计入 CSV。
+# 每组开始会打印并发、请求数、预热数。CSV 在该组结束后才更新。
 cd /opt/AutoVBench
 autovbench run -o /results/explore.csv \
   --backend sglang \
