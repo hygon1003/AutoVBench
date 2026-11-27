@@ -118,13 +118,14 @@ autovbench run -o results.csv --backend vllm --base-url http://127.0.0.1:8000 --
 一行一个 workload。每组写完就原子更新整张表。
 
 ```text
-模型名称,推理引擎版本,num_prompts,input_len,output_len,Benchmark Duration (s),Total Input Tokens,Total Generated Tokens,Request Throughput (req/s),Output Token Throughput (tok/s),Total Token throughput (tok/s),Mean TTFT (ms),Median TTFT (ms),P99 TTFT (ms),Mean TPOT (ms),Median TPOT (ms),P99 TPOT (ms),Mean ITL (ms),Median ITL (ms),P99 ITL (ms),单并发Decode吞吐
+模型名称,推理引擎版本,concurrency,input_len,output_len,Benchmark Duration (s),Total Input Tokens,Total Generated Tokens,Request Throughput (req/s),Output Token Throughput (tok/s),Total Token throughput (tok/s),Mean TTFT (ms),Median TTFT (ms),P99 TTFT (ms),Mean TPOT (ms),Median TPOT (ms),P99 TPOT (ms),Mean ITL (ms),Median ITL (ms),P99 ITL (ms),单并发Decode吞吐
 ```
 
 ```bash
 # 浮点两位小数，计数保持整数。官方结果没有的指标留空。
 # 单并发Decode吞吐 = 1000 / 未四舍五入的 Mean TPOT。Mean TPOT 为 0、非有限或缺失时该列留空。
 # 模型名称：绝对路径取最后一级，其余保持原样。推理引擎版本：客户端版本。
+# concurrency：该组并发，整数。
 # UTF-8 BOM。SGLang 的 total_throughput 写入 Total Token throughput (tok/s)。
 ```
 

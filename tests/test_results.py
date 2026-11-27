@@ -9,7 +9,7 @@ from autovbench.report import write_csv_atomic
 from autovbench.result_mapper import REPORT_FIELDS, load_official_result, map_result
 
 REFERENCE_HEADER = (
-    "num_prompts,input_len,output_len,Benchmark Duration (s),Total Input Tokens,"
+    "concurrency,input_len,output_len,Benchmark Duration (s),Total Input Tokens,"
     "Total Generated Tokens,Request Throughput (req/s),Output Token Throughput (tok/s),"
     "Total Token throughput (tok/s),Mean TTFT (ms),Median TTFT (ms),P99 TTFT (ms),"
     "Mean TPOT (ms),Median TPOT (ms),P99 TPOT (ms),Mean ITL (ms),Median ITL (ms),"
@@ -17,7 +17,7 @@ REFERENCE_HEADER = (
 )
 
 COUNT_FIELDS = (
-    "num_prompts",
+    "concurrency",
     "input_len",
     "output_len",
     "Total Input Tokens",
@@ -89,7 +89,8 @@ def test_sample_metrics_are_present_rounded_and_decoded() -> None:
     assert all(row[field] != "" for field in REPORT_FIELDS)
     assert row["模型名称"] == "Qwen3.8-27B-Channel-INT8-w8a8"
     assert row["推理引擎版本"] == ENGINE_VERSION
-    assert row["num_prompts"] == "32"
+    assert row["concurrency"] == "1"
+    assert "num_prompts" not in row
     assert row["input_len"] == "512"
     assert row["output_len"] == "512"
     assert row["Benchmark Duration (s)"] == "143.22"
@@ -164,29 +165,33 @@ def test_decode_throughput_blank_when_mean_tpot_missing(raw: dict[str, object]) 
 
     assert row["Mean TPOT (ms)"] == ""
     assert row["单并发Decode吞吐"] == ""
-    assert row["num_prompts"] == "10"
+    assert row["concurrency"] == "2"
+    assert "num_prompts" not in row
     assert row["input_len"] == "32"
     assert row["output_len"] == "16"
 
 
-def test_prompt_count_falls_back_to_twice_concurrency() -> None:
+def test_concurrency_comes_from_the_workload() -> None:
     omitted = map_result({}, config("vllm", num_prompts=None), Workload(4, 32, 16), "0.19.0")
     explicit = map_result(
-        {"num_prompts": 3},
-        config("vllm", num_prompts=None),
+        {"num_prompts": 3, "concurrency": 99},
+        config("vllm", num_prompts=32),
         Workload(128, 32, 16),
         "0.19.0",
     )
 
-    assert omitted["num_prompts"] == "8"
-    assert explicit["num_prompts"] == "3"
+    assert omitted["concurrency"] == "4"
+    assert explicit["concurrency"] == "128"
+    assert "num_prompts" not in omitted
+    assert "num_prompts" not in explicit
 
 
 def test_missing_metrics_stay_blank() -> None:
     row = row_for({"completed": 9, "failed": 1, "request_throughput": 7.5})
 
     assert row["Request Throughput (req/s)"] == "7.50"
-    assert row["num_prompts"] == "10"
+    assert row["concurrency"] == "2"
+    assert "num_prompts" not in row
     assert row["Benchmark Duration (s)"] == ""
     assert row["Total Input Tokens"] == ""
     assert row["Mean TTFT (ms)"] == ""
@@ -281,6 +286,38 @@ def test_configured_lengths_fill_input_columns_when_result_omits_them() -> None:
     assert row["output_len"] == "8"
     assert row_for({})["input_len"] == "32"
     assert row_for({})["output_len"] == "16"
+
+
+def test_csv_writes_workload_concurrency_and_omits_num_prompts(tmp_path: Path) -> None:
+    path = tmp_path / "result.csv"
+    workloads = (
+        Workload(1, 512, 512),
+        Workload(4, 32, 16),
+        Workload(128, 16, 8),
+    )
+    rows = [
+        map_result(
+            {"num_prompts": 32, "request_throughput": 1.2},
+            config("vllm", num_prompts=10),
+            workload,
+            "0.19.0",
+        )
+        for workload in workloads
+    ]
+
+    write_csv_atomic(path, rows)
+
+    header = path.read_bytes().decode("utf-8-sig").splitlines()[0]
+    columns = header.split(",")
+    assert "concurrency" in columns
+    assert "num_prompts" not in header
+    assert columns[columns.index("推理引擎版本") + 1] == "concurrency"
+    assert columns[columns.index("concurrency") + 1] == "input_len"
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        records = list(csv.DictReader(handle))
+    assert [record["concurrency"] for record in records] == ["1", "4", "128"]
+    assert all("." not in record["concurrency"] for record in records)
+    assert all("num_prompts" not in record for record in records)
 
 
 def test_csv_has_bom_header_and_two_decimal_metrics(tmp_path: Path) -> None:
