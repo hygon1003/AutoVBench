@@ -115,7 +115,8 @@ input_output:
     with output.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
     assert tuple(rows[0]) == REPORT_FIELDS
-    assert rows[0]["num_prompts"] == "2"
+    assert rows[0]["concurrency"] == "1"
+    assert "num_prompts" not in rows[0]
     assert rows[0]["input_len"] == "16"
     assert rows[0]["output_len"] == "8"
     assert rows[0]["Request Throughput (req/s)"] == "1.00"
@@ -203,7 +204,8 @@ input_output:
     assert rows[0]["模型名称"] == "from-cli"
     assert rows[0]["input_len"] == "32"
     assert rows[0]["output_len"] == "16"
-    assert rows[0]["num_prompts"] == "3"
+    assert rows[0]["concurrency"] == "8"
+    assert "num_prompts" not in rows[0]
     bench = next(item for item in read_invocations(log_path) if "bench" in item)
     assert bench[bench.index("--model") + 1] == "from-cli"
     assert bench[bench.index("--tokenizer") + 1] == "cli-tokenizer"
@@ -302,7 +304,8 @@ def test_failed_workload_keeps_previous_row_and_stderr(tmp_path: Path) -> None:
         rows = list(csv.DictReader(handle))
     assert len(rows) == 1
     assert rows[0]["Request Throughput (req/s)"] == "1.00"
-    assert rows[0]["num_prompts"] == "2"
+    assert rows[0]["concurrency"] == "1"
+    assert "num_prompts" not in rows[0]
     assert (tmp_path / "result_raw" / "c4-in16-out8.stderr").read_text(encoding="utf-8") == "boom\n"
 
 
@@ -386,7 +389,10 @@ def test_omitted_num_prompts_prints_twice_concurrency(
     assert {item[item.index("--warmup-requests") + 1] for item in benches} == {"10"}
     with output.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    assert [row["num_prompts"] for row in rows] == ["2", "8"]
+    assert list(rows[0]) == list(REPORT_FIELDS)
+    assert "concurrency" in rows[0]
+    assert "num_prompts" not in rows[0]
+    assert [row["concurrency"] for row in rows] == ["1", "4"]
     printed = capsys.readouterr().out
     first = "concurrency=1 num_prompts=2 warmup=10; CSV updates after this group finishes"
     second = "concurrency=4 num_prompts=8 warmup=10; CSV updates after this group finishes"
