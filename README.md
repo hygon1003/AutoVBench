@@ -18,8 +18,8 @@ vLLM、SGLang 客户端另行安装。不在 PATH 时用 `--vllm-executable`、`
 ## 运行
 
 ```bash
-# 服务需已启动。不写 --num-prompts 时，每组计入 CSV 的请求数 = 2 × 该组并发。
-# 旧默认 1000 已取消。并发 1 和 4：计入成绩 2 条和 8 条，另外各有 10 条预热。
+# 服务需已启动。不写 --num-prompts 时，每组计入 CSV 的请求数 = 该组并发。
+# 旧默认 1000 已取消。并发 1 和 4：计入成绩 1 条和 4 条，另外各有 10 条预热。
 autovbench run -o results.csv \
   --backend vllm \
   --base-url http://127.0.0.1:8000 \
@@ -62,9 +62,9 @@ autovbench run -c config.yaml -o results.csv
 | `--model` | 无 | 传给官方客户端的模型名或权重路径。绝对路径在 CSV「模型名称」里取最后一级 |
 | `--concurrency` | 无，逗号分隔 | 每个并发再配上每一对输入输出长度，各跑一组 |
 | `--input-output` | 无，逗号分隔的 `input:output` | 例如 `512:512,4096:1024` |
-| `--num-prompts` | 不写则为 `2 ×` 该组并发 | 每组计入 CSV 的请求数。预热不计入 |
+| `--num-prompts` | 不写则为该组并发 | 每组计入 CSV 的请求数。预热不计入 |
 
-不写 `--num-prompts`、配置里也没有 `num_prompts` 时，该组计入成绩的请求数 = `2 ×` 该组并发：并发 1 → 2，4 → 8，128 → 256。不是用第一组的并发去套整张表。旧默认 1000 已取消。写了 `N`，或配置 `num_prompts: N`：每一组都用同一个 `N`。
+不写 `--num-prompts`、配置里也没有 `num_prompts` 时，该组计入成绩的请求数 = 该组并发：并发 1 → 1，4 → 4，128 → 128。不是用第一组的并发去套整张表。旧默认 1000 已取消。写了 `N`，或配置 `num_prompts: N`：每一组都用同一个 `N`。
 
 默认另有 10 条预热，默认保留 raw 目录。
 
@@ -80,7 +80,7 @@ autovbench run -c config.yaml -o results.csv
 | `--sglang-python` | 默认 `python` | 用来执行 `python -m sglang.bench_serving` |
 | `--keep-raw-results` / `--no-keep-raw-results` | 默认保留 | 目录 `<结果名>_raw/`，见下方说明 |
 
-`--warmup-requests`：预热不计入 CSV。不写 `--num-prompts` 且并发为 1 时，是 10 条预热 + 2 条计入成绩。vLLM 传 `--num-warmups`，SGLang 传 `--warmup-requests`。
+`--warmup-requests`：预热不计入 CSV。不写 `--num-prompts` 且并发为 1 时，是 10 条预热 + 1 条计入成绩。vLLM 传 `--num-warmups`，SGLang 传 `--warmup-requests`。
 
 `--keep-raw-results`：目录例如 `results_raw/c1-in512-out512.json`、`.stdout`、`.stderr`。
 

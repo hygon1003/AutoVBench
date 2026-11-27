@@ -75,8 +75,8 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help=(
             "measured prompts for every workload. "
-            "Omit to use 2 x that workload's concurrency "
-            "(concurrency 1 -> 2, 4 -> 8, 128 -> 256; the old default was 1000). "
+            "Omit to use that workload's concurrency "
+            "(concurrency 1 -> 1, 4 -> 4, 128 -> 128; the old default was 1000). "
             "Warmups are extra and are not in the CSV"
         ),
     )
@@ -86,7 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "extra warmup requests, not written to the CSV. Default 10. 0 disables. "
             "vLLM receives --num-warmups, SGLang receives --warmup-requests. "
-            "A concurrency-1 run that omits --num-prompts is 10 warmups + 2 measured prompts"
+            "A concurrency-1 run that omits --num-prompts is 10 warmups + 1 measured prompt"
         ),
     )
     run_parser.add_argument("--seed", type=int, help="official --seed. Default 1")
@@ -201,7 +201,7 @@ def _run(args: argparse.Namespace) -> int:
     raw_dir.mkdir(parents=True, exist_ok=True)
     try:
         if config.num_prompts is None:
-            prompt_note = "measured prompts = 2 x each workload's concurrency"
+            prompt_note = "measured prompts = each workload's concurrency"
         else:
             prompt_note = f"measured prompts = {config.num_prompts} for every workload"
         print(

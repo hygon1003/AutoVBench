@@ -100,10 +100,10 @@ def test_num_prompts_follows_each_workload_when_unset(tmp_path: Path) -> None:
         Workload(4, 128, 64), tmp_path / "d.jsonl"
     )
 
-    assert one[one.index("--num-prompts") + 1] == "2"
-    assert large[large.index("--num-prompts") + 1] == "256"
+    assert one[one.index("--num-prompts") + 1] == "1"
+    assert large[large.index("--num-prompts") + 1] == "128"
     assert fixed[fixed.index("--num-prompts") + 1] == "5"
-    assert sglang_one[sglang_one.index("--num-prompts") + 1] == "8"
+    assert sglang_one[sglang_one.index("--num-prompts") + 1] == "4"
     assert one[one.index("--num-warmups") + 1] == "10"
     assert sglang_one[sglang_one.index("--warmup-requests") + 1] == "10"
 
