@@ -348,7 +348,7 @@ def test_cli_requires_backend(tmp_path: Path) -> None:
     assert main(["run", "-o", str(tmp_path / "result.csv")]) == 2
 
 
-def test_omitted_num_prompts_prints_twice_concurrency(
+def test_omitted_num_prompts_prints_each_concurrency(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -385,7 +385,7 @@ def test_omitted_num_prompts_prints_twice_concurrency(
         for item in read_invocations(log_path)
         if "sglang.bench_serving" in item
     ]
-    assert [item[item.index("--num-prompts") + 1] for item in benches] == ["2", "8"]
+    assert [item[item.index("--num-prompts") + 1] for item in benches] == ["1", "4"]
     assert {item[item.index("--warmup-requests") + 1] for item in benches} == {"10"}
     with output.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
@@ -394,8 +394,9 @@ def test_omitted_num_prompts_prints_twice_concurrency(
     assert "num_prompts" not in rows[0]
     assert [row["concurrency"] for row in rows] == ["1", "4"]
     printed = capsys.readouterr().out
-    first = "concurrency=1 num_prompts=2 warmup=10; CSV updates after this group finishes"
-    second = "concurrency=4 num_prompts=8 warmup=10; CSV updates after this group finishes"
+    assert "measured prompts = each workload's concurrency" in printed
+    first = "concurrency=1 num_prompts=1 warmup=10; CSV updates after this group finishes"
+    second = "concurrency=4 num_prompts=4 warmup=10; CSV updates after this group finishes"
     assert first in printed
     assert second in printed
     assert printed.index(first) < printed.index(second)
@@ -437,6 +438,7 @@ def test_help_documents_prompt_and_warmup_defaults(capsys: pytest.CaptureFixture
 
     assert caught.value.code == 0
     text = " ".join(capsys.readouterr().out.split())
-    assert "2 x that workload's concurrency" in text
+    assert "Omit to use that workload's concurrency" in text
+    assert "concurrency 1 -> 1, 4 -> 4, 128 -> 128" in text
     assert "old default was 1000" in text
-    assert "10 warmups + 2 measured prompts" in text
+    assert "10 warmups + 1 measured prompt" in text

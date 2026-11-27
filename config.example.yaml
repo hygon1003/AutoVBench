@@ -27,13 +27,13 @@ sglang_python: python
 # random_range_ratio: 0
 
 # 每组计入 CSV 的请求数。预热不计入。
-# 删掉本项：每组 = 2 × 该组并发（并发 1 → 2，4 → 8，128 → 256）。旧默认 1000 已取消。
+# 删掉本项：每组 = 该组并发（并发 1 → 1，4 → 4，128 → 128）。旧默认 1000 已取消。
 # 写成正整数：每一组都用这个数。
 # num_prompts: 32
 
 # 额外预热条数。默认 10。不计入 CSV。0 关闭。
 # vLLM 传 --num-warmups，SGLang 传 --warmup-requests。
-# 不写 num_prompts 且并发为 1：10 条预热 + 2 条计入成绩。
+# 不写 num_prompts 且并发为 1：10 条预热 + 1 条计入成绩。
 warmup_requests: 10
 
 # 每个并发配上下面每一对长度，各跑一组。

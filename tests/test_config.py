@@ -52,8 +52,8 @@ def test_example_defaults() -> None:
     assert config.concurrency == (1, 4, 8, 16, 32, 64, 128)
     assert config.input_output == ((512, 512), (4096, 1024), (16384, 1024))
     assert config.num_prompts is None
-    assert config.resolved_num_prompts(Workload(1, 512, 512)) == 2
-    assert config.resolved_num_prompts(Workload(128, 512, 512)) == 256
+    assert config.resolved_num_prompts(Workload(1, 512, 512)) == 1
+    assert config.resolved_num_prompts(Workload(128, 512, 512)) == 128
     assert config.warmup_requests == 10
     assert config.keep_raw_results is True
     assert config.resolved_dataset_name() == "random"
@@ -103,18 +103,18 @@ def _minimum_config(**extra: object) -> dict[str, object]:
     return data
 
 
-def test_omitted_num_prompts_is_twice_each_concurrency() -> None:
+def test_omitted_num_prompts_is_each_concurrency() -> None:
     config = build_config(_minimum_config())
 
     assert config.num_prompts is None
     assert config.warmup_requests == 10
     assert [config.resolved_num_prompts(workload) for workload in config.workloads()] == [
-        2,
-        2,
-        8,
-        8,
-        256,
-        256,
+        1,
+        1,
+        4,
+        4,
+        128,
+        128,
     ]
 
 
